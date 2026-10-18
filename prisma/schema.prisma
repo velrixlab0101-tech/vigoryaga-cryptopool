@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Draw {
+  id                String    @id @default(cuid())
+  title             String
+  ticketPrice       Float     @default(1.0)
+  operatorFeePct    Float     @default(10.0)
+  startTime         DateTime
+  closeTime         DateTime
+  status            String    @default("draft")
+  prizeStructure    Json      @default("[{\"tier\":1,\"pct\":50},{\"tier\":2,\"pct\":25},{\"tier\":3,\"pct\":15},{\"tier\":4,\"pct\":7},{\"tier\":5,\"pct\":3}]")
+  potTotal          Float     @default(0)
+  operatorPaid      Boolean   @default(false)
+  operatorTxHash    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  tickets           Ticket[]
+  winners           Winner[]
+}
+
+model Ticket {
+  id           String   @id @default(cuid())
+  drawId       String
+  buyerAddress String
+  txHash       String   @unique
+  qty          Int
+  amount       Float
+  referrerCode String?
+  createdAt    DateTime @default(now())
+  draw         Draw     @relation(fields: [drawId], references: [id])
+}
+
+model Winner {
+  id           String   @id @default(cuid())
+  drawId       String
+  place        Int
+  wallet       String
+  amount       Float
+  spent        Float    @default(0)
+  txHash       String?
+  createdAt    DateTime @default(now())
+  draw         Draw     @relation(fields: [drawId], references: [id])
+}
+
+model Referral {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  ownerAddress  String
+  earnedCredits Float    @default(0)
+  createdAt     DateTime @default(now())
+}
