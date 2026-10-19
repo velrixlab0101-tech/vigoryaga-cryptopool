@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
+import { Celebration } from '@/components/Celebration'
 
 interface Winner {
   id: string
@@ -81,6 +82,7 @@ export default function WinnersPage() {
         ) : (
           <>
             <section className="bg-surface rounded-2xl border border-accent/20 p-6 sm:p-8 mb-12">
+              <Celebration run={revealed} />
               <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <div>
                   <p className="text-xs uppercase tracking-widest text-accent mb-1">Latest draw</p>

@@ -13,6 +13,7 @@ import {
   toUsdcUnits,
 } from '@/lib/contracts'
 import { SUPPORTED_CHAIN_IDS } from '@/lib/chain'
+import { Countdown } from '@/components/Countdown'
 
 interface Draw {
   id: string
@@ -159,6 +160,10 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
             Ticket ${draw.ticketPrice} USDC • Pot ${draw.potTotal.toFixed(2)} USDC • Closes{' '}
             {new Date(draw.closeTime).toLocaleString()}
           </p>
+          <div className="flex items-center gap-3 mb-8">
+            <span className="text-sm text-foreground/60">Closes in</span>
+            <Countdown to={draw.closeTime} />
+          </div>
         </motion.div>
 
         <div className="bg-surface rounded-xl p-6 border border-accent/20">

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
+import { Countdown } from '@/components/Countdown'
 
 interface Draw {
   id: string
@@ -71,7 +72,13 @@ export default function Home() {
               ${draw ? draw.potTotal.toFixed(2) : '0.00'} USDC
             </div>
             <p className="text-foreground/70 mb-2">{draw?.title ?? 'No draw yet'}</p>
-            <p className="text-foreground/70 mb-8">5 Winners • {split} Split</p>
+            <p className="text-foreground/70 mb-4">5 Winners • {split} Split</p>
+            {draw && draw.status === 'open' && (
+              <div className="flex items-center justify-center gap-3 mb-6">
+                <span className="text-sm text-foreground/60">Closes in</span>
+                <Countdown to={draw.closeTime} />
+              </div>
+            )}
             <Link
               href={href}
               className="inline-block bg-accent text-background font-bold px-8 py-4 rounded-lg text-lg hover:bg-accent/90 transition-colors pulse-glow"
