@@ -110,6 +110,16 @@ export async function POST(
         where: { id: draw.id },
         data: { potTotal: { increment: amountDollars } },
       })
+      if (referrerCode) {
+        const referral = await tx.referral.findUnique({ where: { code: referrerCode } })
+        if (referral && referral.ownerAddress.toLowerCase() !== buyer) {
+          const pct = Math.min(50, Math.max(0, parseFloat(process.env.REFERRAL_PCT || '5')))
+          await tx.referral.update({
+            where: { id: referral.id },
+            data: { earnedCredits: { increment: amountDollars * (pct / 100) } },
+          })
+        }
+      }
       return created
     })
 

@@ -31,6 +31,7 @@ type Step = 'idle' | 'approving' | 'buying' | 'recording' | 'done'
 
 export default function DrawDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const [referrerCode, setReferrerCode] = useState<string | undefined>()
   const { address, chainId, isConnected } = useAccount()
   const publicClient = usePublicClient()
   const { switchChainAsync } = useSwitchChain()
@@ -51,6 +52,11 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     load()
   }, [id])
+
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref')
+    if (ref) setReferrerCode(ref)
+  }, [])
 
   const vault = getVaultAddress()
   const chainSupported = chainId !== undefined && (SUPPORTED_CHAIN_IDS as readonly number[]).includes(chainId)
@@ -116,7 +122,7 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
       const res = await fetch(`/api/draws/${draw.id}/tickets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash: buyHash }),
+        body: JSON.stringify({ txHash: buyHash, referrerCode }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))

@@ -16,6 +16,7 @@ export default function Navbar() {
               <Link href="/" className="text-foreground/80 hover:text-foreground transition-colors">Draws</Link>
               <Link href="/winners" className="text-foreground/80 hover:text-foreground transition-colors">Winners</Link>
               <Link href="/my-tickets" className="text-foreground/80 hover:text-foreground transition-colors">My Tickets</Link>
+              <Link href="/referrals" className="text-foreground/80 hover:text-foreground transition-colors">Referrals</Link>
               <Link href="/admin" className="text-foreground/80 hover:text-foreground transition-colors">Admin</Link>
             </div>
           </div>

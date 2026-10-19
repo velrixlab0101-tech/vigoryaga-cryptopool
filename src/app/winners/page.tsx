@@ -89,14 +89,22 @@ export default function WinnersPage() {
                     Pot ${latest.potTotal.toFixed(2)} • {latest.winnerCount} winners
                   </p>
                 </div>
-                {!revealed && (
-                  <button
-                    onClick={() => setRevealed(true)}
-                    className="bg-accent text-background px-6 py-2 rounded-lg font-semibold hover:bg-accent/90"
+                <div className="flex gap-2">
+                  {!revealed && (
+                    <button
+                      onClick={() => setRevealed(true)}
+                      className="bg-accent text-background px-6 py-2 rounded-lg font-semibold hover:bg-accent/90"
+                    >
+                      Reveal winners
+                    </button>
+                  )}
+                  <Link
+                    href={`/winners/${latest.id}`}
+                    className="border border-accent/40 text-accent px-6 py-2 rounded-lg font-semibold hover:bg-accent/10"
                   >
-                    Reveal winners
-                  </button>
-                )}
+                    Shareable page →
+                  </Link>
+                </div>
               </div>
 
               <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">

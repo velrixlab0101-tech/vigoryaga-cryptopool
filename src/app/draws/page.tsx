@@ -16,9 +16,12 @@ interface Draw {
 
 export default function DrawsPage() {
   const [draws, setDraws] = useState<Draw[]>([])
+  const [ref, setRef] = useState('')
   
   useEffect(() => {
     fetch('/api/draws').then(r => r.json()).then(setDraws)
+    const code = new URLSearchParams(window.location.search).get('ref')
+    if (code) setRef(code)
   }, [])
   
   return (
@@ -54,7 +57,7 @@ export default function DrawsPage() {
               </div>
               {draw.status === 'open' && (
                 <Link
-                  href={`/draws/${draw.id}`}
+                  href={`/draws/${draw.id}${ref ? `?ref=${ref}` : ''}`}
                   className="inline-block mt-4 bg-accent text-background px-5 py-2 rounded-lg font-semibold hover:bg-accent/90"
                 >
                   Buy tickets →
