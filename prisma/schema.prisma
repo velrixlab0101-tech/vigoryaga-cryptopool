@@ -8,6 +8,7 @@ datasource db {
 
 model Draw {
   id                String    @id @default(cuid())
+  chainDrawId       Int?      @unique
   title             String
   ticketPrice       Float     @default(1.0)
   operatorFeePct    Float     @default(10.0)

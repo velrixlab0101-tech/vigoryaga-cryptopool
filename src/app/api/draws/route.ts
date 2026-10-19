@@ -24,9 +24,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { title, ticketPrice, operatorFeePct, startTime, closeTime, prizeStructure } = body
-    
+
+    const last = await prisma.draw.findFirst({
+      orderBy: { chainDrawId: 'desc' },
+      select: { chainDrawId: true },
+    })
+    const chainDrawId = (last?.chainDrawId ?? 0) + 1
+
     const draw = await prisma.draw.create({
       data: {
+        chainDrawId,
         title,
         ticketPrice: parseFloat(ticketPrice),
         operatorFeePct: parseFloat(operatorFeePct || 10),

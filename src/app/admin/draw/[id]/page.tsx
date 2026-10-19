@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAccount, useSignMessage } from 'wagmi'
+import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { motion } from 'framer-motion'
 import { isAdminAddress, getAdminWallet, buildAdminFetchHeaders } from '@/lib/admin-client'
+import { RAFFLE_VAULT_ABI, getVaultAddress, toUsdcUnits } from '@/lib/contracts'
 
 interface Ticket {
   id: string
@@ -15,6 +16,7 @@ interface Ticket {
 
 interface Draw {
   id: string
+  chainDrawId: number | null
   title: string
   ticketPrice: number
   operatorFeePct: number
@@ -24,6 +26,8 @@ interface Draw {
   winners: any[]
   prizeStructure: any[]
   potTotal: number
+  operatorPaid: boolean
+  operatorTxHash: string | null
 }
 
 interface WinnerAssignment {
@@ -36,6 +40,9 @@ interface WinnerAssignment {
 export default function DrawResultsPage({ params }: { params: Promise<{ id: string }> }) {
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
+  const { writeContractAsync } = useWriteContract()
+  const [payoutHash, setPayoutHash] = useState<`0x${string}` | undefined>()
+  const { isSuccess: payoutConfirmed } = useWaitForTransactionReceipt({ hash: payoutHash })
   const [draw, setDraw] = useState<Draw | null>(null)
   const [players, setPlayers] = useState<any[]>([])
   const [prizeStructure, setPrizeStructure] = useState<any[]>([
@@ -57,6 +64,16 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
         setPrizeStructure(d.prizeStructure || prizeStructure)
         setOperatorFee(d.operatorFeePct || 10)
         aggregatePlayers(d.tickets)
+        if (Array.isArray(d.winners) && d.winners.length > 0) {
+          setWinners(
+            d.winners.map((w: any) => ({
+              place: w.place,
+              wallet: w.wallet,
+              amount: w.amount,
+              spent: w.spent,
+            })),
+          )
+        }
       })
     })
   }, [])
@@ -113,11 +130,27 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
     try {
       setError('')
       if (!draw) return
+      if (draw.status === 'drawn') {
+        setError('Winners already declared for this draw')
+        return
+      }
+      if (winners.length === 0) {
+        setError('Assign at least one winner')
+        return
+      }
+      if (!useFixed && Math.abs(totalPct - 100) > 0.01) {
+        setError(`Prize percentages must total 100% (currently ${totalPct.toFixed(1)}%)`)
+        return
+      }
+      if (useFixed && totalWinnersAmount > prizePoolPreview + 0.01) {
+        setError(`Winners total $${totalWinnersAmount.toFixed(2)} exceeds prize pool $${prizePoolPreview.toFixed(2)}`)
+        return
+      }
       const headers = await buildAdminFetchHeaders(address, signMessageAsync)
       const res = await fetch(`/api/draws/${draw.id}/results`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ winners }),
+        body: JSON.stringify({ winners, prizeStructure, operatorFeePct: operatorFee }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -130,6 +163,68 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
     }
   }
   
+  const batchPayout = async () => {
+    try {
+      setError('')
+      if (!draw) return
+      const vault = getVaultAddress()
+      if (!vault) {
+        setError('Vault address not configured (NEXT_PUBLIC_RAFFLE_VAULT)')
+        return
+      }
+      if (draw.chainDrawId === null || draw.chainDrawId === undefined) {
+        setError('Draw is missing an on-chain id')
+        return
+      }
+      if (draw.operatorPaid) {
+        setError('Payout already recorded for this draw')
+        return
+      }
+      if (winners.length === 0) {
+        setError('No winners to pay')
+        return
+      }
+      const paidWinners = winners.filter((w) => w.amount > 0)
+      const operators = (adminWallet || address) as `0x${string}` | undefined
+      if (!operators) {
+        setError('No operator wallet available')
+        return
+      }
+      const hash = await writeContractAsync({
+        address: vault,
+        abi: RAFFLE_VAULT_ABI,
+        functionName: 'payoutBatch',
+        args: [
+          BigInt(draw.chainDrawId),
+          paidWinners.map((w) => w.wallet as `0x${string}`),
+          paidWinners.map((w) => toUsdcUnits(w.amount)),
+          paidWinners.map((w) => w.place),
+          operators,
+          toUsdcUnits(operatorFeeAmount),
+        ],
+      })
+      setPayoutHash(hash)
+    } catch (e: any) {
+      setError(e?.shortMessage || e?.message || 'Payout failed')
+    }
+  }
+
+  useEffect(() => {
+    if (!payoutConfirmed || !payoutHash || !draw) return
+    buildAdminFetchHeaders(address, signMessageAsync)
+      .then((headers) =>
+        fetch(`/api/draws/${draw.id}/payout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ txHash: payoutHash }),
+        }),
+      )
+      .then((res) => {
+        if (res?.ok) location.reload()
+      })
+      .catch(() => {})
+  }, [payoutConfirmed, payoutHash])
+
   const isAdmin = isAdminAddress(address)
   const adminWallet = getAdminWallet()
   
@@ -257,7 +352,32 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
                 Total winners: ${totalWinnersAmount.toFixed(2)} USDC | Prize pool: ${prizePoolPreview.toFixed(2)} USDC
               </div>
               {error && <p className="mt-3 text-red-400 text-sm">{error}</p>}
-              <button onClick={declareWinners} className="mt-4 w-full bg-accent text-background py-2 rounded font-semibold hover:bg-accent/90">Declare & Save Winners</button>
+              <button
+                onClick={declareWinners}
+                disabled={draw.status === 'drawn' || draw.status === 'paid'}
+                className="mt-4 w-full bg-accent text-background py-2 rounded font-semibold hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {draw.status === 'drawn' || draw.status === 'paid' ? 'Winners Declared' : 'Declare & Save Winners'}
+              </button>
+              {(draw.status === 'drawn' || draw.status === 'paid') && (
+                <>
+                  {draw.status === 'paid' ? (
+                    <p className="mt-4 text-center text-sm text-green-400">
+                      Payout recorded{draw.operatorTxHash ? ` • ${draw.operatorTxHash.slice(0, 10)}...` : ''}
+                    </p>
+                  ) : (
+                    <button
+                      onClick={batchPayout}
+                      disabled={!!payoutHash && !payoutConfirmed}
+                      className="mt-3 w-full bg-green-500 text-background py-2 rounded font-semibold hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {payoutHash && !payoutConfirmed
+                        ? 'Confirming payout...'
+                        : 'Batch Payout (winners + fee)'}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -12,13 +12,31 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const { winners } = body
+    const { winners, prizeStructure, operatorFeePct } = body
     
     if (!Array.isArray(winners)) {
       return NextResponse.json({ error: 'Invalid winners' }, { status: 400 })
     }
     
+    const draw = await prisma.draw.findUnique({ where: { id } })
+    if (!draw) return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+    if (draw.status === 'drawn') {
+      return NextResponse.json({ error: 'Winners already declared' }, { status: 409 })
+    }
+    
+    const fee = parseFloat(operatorFeePct ?? draw.operatorFeePct)
+    if (Number.isNaN(fee) || fee < 0 || fee > 50) {
+      return NextResponse.json({ error: 'Operator fee must be 0–50%' }, { status: 400 })
+    }
+    
     await prisma.$transaction(async (tx) => {
+      await tx.draw.update({
+        where: { id },
+        data: {
+          prizeStructure: prizeStructure ?? draw.prizeStructure,
+          operatorFeePct: fee,
+        },
+      })
       for (const winner of winners) {
         await tx.winner.create({
           data: {
