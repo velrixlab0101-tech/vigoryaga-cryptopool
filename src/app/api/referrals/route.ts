@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
+import { rateLimit } from '@/lib/rate-limit'
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -23,6 +24,10 @@ export async function GET(request: NextRequest) {
     const wallet = (request.nextUrl.searchParams.get('wallet') ?? '').trim().toLowerCase()
     if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
       return NextResponse.json({ error: 'Invalid wallet' }, { status: 400 })
+    }
+
+    if (!rateLimit(`referral:${wallet}`, 15, 60_000).ok) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 
     let referral = await prisma.referral.findFirst({ where: { ownerAddress: wallet } })

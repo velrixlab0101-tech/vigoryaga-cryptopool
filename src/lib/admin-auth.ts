@@ -7,6 +7,7 @@ import {
   normalizeWallet,
   parseAdminMessageTimestamp,
 } from '@/lib/admin-wallet'
+import { rateLimit } from '@/lib/rate-limit'
 
 export { ADMIN_HEADERS, buildAdminMessage, getAdminWallet, isAdminAddress, encodeAdminMessage } from '@/lib/admin-wallet'
 
@@ -31,6 +32,13 @@ export async function verifyAdminAuth(headers: Headers): Promise<AdminAuth> {
   const message = decodeAdminMessage(headers.get(ADMIN_HEADERS.message))
   const signature = (headers.get(ADMIN_HEADERS.signature) ?? '').trim()
   const token = (headers.get(ADMIN_HEADERS.token) ?? '').trim()
+
+  // Throttle admin authentication attempts by claimed wallet (never by IP).
+  const limiterKey = `admin:${wallet || 'anonymous'}`
+  const limit = rateLimit(limiterKey, 60, 60_000)
+  if (!limit.ok) {
+    return { ok: false, reason: 'too many attempts' }
+  }
 
   if (message !== '' && signature !== '') {
     if (wallet === '') return { ok: false, reason: 'missing x-admin-wallet header' }

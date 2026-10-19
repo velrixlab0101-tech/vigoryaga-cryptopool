@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_HEADERS, normalizeWallet, getAdminWallet } from '@/lib/admin-wallet'
 
+/**
+ * Network-boundary checks. No request is ever logged with a visitor IP or
+ * user agent; only an opaque request id is attached for support correlation.
+ */
 export function proxy(request: NextRequest) {
-  const response = NextResponse.next()
-  
-  response.headers.set('X-Request-ID', crypto.randomUUID())
-  response.headers.set('X-Frame-Options', 'SAMEORIGIN')
-  response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('Referrer-Policy', 'origin-when-cross-origin')
-  
-  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
-
   const { pathname } = request.nextUrl
+  const response = NextResponse.next()
+
+  response.headers.set('X-Request-ID', crypto.randomUUID())
+
   const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isApiPath = pathname.startsWith('/api/')
+
+  // Never cache API responses or admin pages.
+  if (isApiPath || isAdminPath) {
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+  }
 
   if (isAdminPath) {
-    // Optimistic check at the network boundary: reject any request that
-    // *claims* an admin identity which is not the configured admin wallet.
-    // Requests with no admin headers are passed through (the page renders the
-    // "Not authorized" state client-side); actual mutations are authorized
-    // server-side in the route handlers via verifyAdminAuth().
+    // Optimistic gate: reject any request that *claims* an admin identity which
+    // is not the configured admin wallet. Requests with no admin headers pass
+    // through and render the "Not authorized" state; actual mutations are
+    // authorized server-side in the route handlers via verifyAdminAuth().
     const claimed = normalizeWallet(request.headers.get(ADMIN_HEADERS.wallet))
     const adminWallet = normalizeWallet(getAdminWallet())
 
@@ -29,10 +33,8 @@ export function proxy(request: NextRequest) {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       })
     }
-
-    response.headers.set('X-Admin-Auth', 'required')
   }
-  
+
   return response
 }
 
