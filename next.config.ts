@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
     { source: '/api/:path*', headers: [
       { key: 'Access-Control-Allow-Origin', value: 'https://cryptopool.pages.dev' },
       { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
-      { key: 'Access-Control-Allow-Headers', value: 'Content-Type,Authorization' },
+      { key: 'Access-Control-Allow-Headers', value: 'Content-Type,Authorization,X-Admin-Wallet,X-Admin-Message,X-Admin-Signature,X-Admin-Token' },
     ]},
   ],
 }

@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useSignMessage } from 'wagmi'
 import { motion } from 'framer-motion'
-
-const ADMIN_WALLET = process.env.NEXT_PUBLIC_ADMIN_WALLET || ''
+import { isAdminAddress, getAdminWallet, buildAdminFetchHeaders } from '@/lib/admin-client'
 
 interface Ticket {
   id: string
@@ -36,6 +35,7 @@ interface WinnerAssignment {
 
 export default function DrawResultsPage({ params }: { params: Promise<{ id: string }> }) {
   const { address } = useAccount()
+  const { signMessageAsync } = useSignMessage()
   const [draw, setDraw] = useState<Draw | null>(null)
   const [players, setPlayers] = useState<any[]>([])
   const [prizeStructure, setPrizeStructure] = useState<any[]>([
@@ -48,6 +48,7 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
   const [winners, setWinners] = useState<WinnerAssignment[]>([])
   const [operatorFee, setOperatorFee] = useState(10)
   const [useFixed, setUseFixed] = useState(false)
+  const [error, setError] = useState('')
   
   useEffect(() => {
     params.then((p) => {
@@ -108,11 +109,38 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
     }
   }
   
-  const isAdmin = address && ADMIN_WALLET && address.toLowerCase() === ADMIN_WALLET.toLowerCase()
+  const declareWinners = async () => {
+    try {
+      setError('')
+      if (!draw) return
+      const headers = await buildAdminFetchHeaders(address, signMessageAsync)
+      const res = await fetch(`/api/draws/${draw.id}/results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ winners }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.reason || data.error || 'Failed to declare winners')
+        return
+      }
+      location.reload()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to declare winners')
+    }
+  }
+  
+  const isAdmin = isAdminAddress(address)
+  const adminWallet = getAdminWallet()
   
   if (!isAdmin || !draw) {
-    return <div className="min-h-screen flex items-center justify-center text-foreground/70">Not authorized</div>
+    return <div className="min-h-screen flex items-center justify-center text-foreground/70">Not authorized {adminWallet ? `(${adminWallet.slice(0,6)}...${adminWallet.slice(-4)})` : ''}</div>
   }
+  
+  const totalPct = prizeStructure.reduce((s, t) => s + (t.pct || 0), 0)
+  const prizePoolPreview = draw.potTotal * (100 - operatorFee) / 100
+  const totalWinnersAmount = winners.reduce((s, w) => s + w.amount, 0)
+  const operatorFeeAmount = draw.potTotal * operatorFee / 100
   
   return (
     <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
@@ -167,12 +195,14 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
             <div className="bg-surface rounded-xl p-6 border border-accent/20 mb-6">
               <h2 className="text-xl font-semibold mb-4">Prize Structure</h2>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm">Operator Fee</span>
+                <span className="text-sm">Operator Fee (0–50%)</span>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    min="0"
+                    max="50"
                     value={operatorFee}
-                    onChange={e => setOperatorFee(parseFloat(e.target.value))}
+                    onChange={e => setOperatorFee(Math.max(0, Math.min(50, parseFloat(e.target.value) || 0)))}
                     className="bg-background border border-surface p-1 rounded w-12 text-right"
                   />
                   <span>%</span>
@@ -194,7 +224,7 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
                     type="number"
                     value={prizeStructure.find(t => t.tier === n)?.[useFixed ? 'amount' : 'pct'] || 0}
                     onChange={e => {
-                      const val = parseFloat(e.target.value)
+                      const val = parseFloat(e.target.value) || 0
                       setPrizeStructure(ps => ps.map(t => t.tier === n ? { ...t, [useFixed ? 'amount' : 'pct']: val } : t))
                     }}
                     className="bg-background border border-surface p-1 rounded w-16 text-right"
@@ -203,7 +233,8 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
                 </div>
               ))}
               <div className="mt-4 text-sm text-foreground/70">
-                {!useFixed && `Total: ${prizeStructure.reduce((s,t) => s + (t.pct||0), 0)}%`}
+                {!useFixed && `Total: ${totalPct.toFixed(1)}% (should be 100%)`}
+                {useFixed && `Prize pool after fee: $${prizePoolPreview.toFixed(2)}`}
               </div>
               <button onClick={calculatePrizes} className="mt-4 w-full bg-accent text-background py-2 rounded font-semibold hover:bg-accent/90">Calculate Prizes</button>
             </div>
@@ -221,9 +252,12 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
                 </div>
               ))}
               <div className="mt-4 text-xs text-foreground/70">
-                Operator fee: ${(draw.potTotal * operatorFee / 100).toFixed(2)} USDC
+                Operator fee: ${operatorFeeAmount.toFixed(2)} USDC ({operatorFee}%)
+                <br />
+                Total winners: ${totalWinnersAmount.toFixed(2)} USDC | Prize pool: ${prizePoolPreview.toFixed(2)} USDC
               </div>
-              <button className="mt-4 w-full bg-accent/60 text-background py-2 rounded font-semibold cursor-not-allowed" disabled>Declare & Batch Payout (next)</button>
+              {error && <p className="mt-3 text-red-400 text-sm">{error}</p>}
+              <button onClick={declareWinners} className="mt-4 w-full bg-accent text-background py-2 rounded font-semibold hover:bg-accent/90">Declare & Save Winners</button>
             </div>
           </div>
         </div>

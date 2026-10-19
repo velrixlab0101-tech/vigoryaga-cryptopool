@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { verifyAdminAuth, adminUnauthorized } from '@/lib/admin-auth'
 
 export async function GET(
   request: NextRequest,
@@ -24,6 +25,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await verifyAdminAuth(request.headers)
+  if (!auth.ok) return adminUnauthorized(auth.reason)
+
   try {
     const { id } = await params
     const body = await request.json()

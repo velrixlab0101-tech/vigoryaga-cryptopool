@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { verifyAdminAuth, adminUnauthorized } from '@/lib/admin-auth'
 
 export async function GET() {
   try {
@@ -17,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await verifyAdminAuth(request.headers)
+  if (!auth.ok) return adminUnauthorized(auth.reason)
+
   try {
     const body = await request.json()
     const { title, ticketPrice, operatorFeePct, startTime, closeTime, prizeStructure } = body
