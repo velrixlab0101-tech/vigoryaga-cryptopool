@@ -13,7 +13,7 @@ export async function GET() {
       },
     })
     return NextResponse.json(serialize(draws))
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch draws' }, { status: 500 })
   }
 }
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       },
     })
     return NextResponse.json(serialize(draw))
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to create draw' }, { status: 500 })
   }
 }

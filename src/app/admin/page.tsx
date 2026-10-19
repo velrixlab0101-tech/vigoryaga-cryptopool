@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import { motion } from 'framer-motion'
 import { isAdminAddress, getAdminWallet, buildAdminFetchHeaders } from '@/lib/admin-client'
+import { errorMessage } from '@/lib/errors'
 
 interface Draw {
   id: string
@@ -12,8 +13,8 @@ interface Draw {
   operatorFeePct: number
   status: string
   closeTime: string
-  tickets: any[]
-  winners: any[]
+  tickets: unknown[]
+  winners: unknown[]
 }
 
 export default function AdminPage() {
@@ -49,8 +50,8 @@ export default function AdminPage() {
         return
       }
       location.reload()
-    } catch (e: any) {
-      setError(e?.message || 'Failed to create draw')
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to create draw'))
     }
   }
   
@@ -72,8 +73,8 @@ export default function AdminPage() {
         return
       }
       location.reload()
-    } catch (e: any) {
-      setError(e?.message || 'Failed to update status')
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to update status'))
     }
   }
   

@@ -81,5 +81,5 @@ export function decodeAdminMessage(value: string | null | undefined): string {
 
 /** Encodes a message so it can be safely sent in an HTTP header (no newlines). */
 export function encodeAdminMessage(message: string): string {
-  return message.replace(/\n/g, '\u000A')
+  return encodeURIComponent(message)
 }

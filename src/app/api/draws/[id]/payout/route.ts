@@ -45,7 +45,7 @@ export async function POST(
     })
 
     return NextResponse.json({ success: true, txHash })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to record payout' }, { status: 500 })
   }
 }

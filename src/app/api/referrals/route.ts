@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       referredVolume,
     }),
     )
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch referral' }, { status: 500 })
   }
 }

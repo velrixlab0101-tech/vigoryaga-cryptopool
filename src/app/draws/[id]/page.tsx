@@ -14,6 +14,7 @@ import {
 } from '@/lib/contracts'
 import { SUPPORTED_CHAIN_IDS } from '@/lib/chain'
 import { Countdown } from '@/components/Countdown'
+import { errorMessage } from '@/lib/errors'
 
 interface Draw {
   id: string
@@ -52,6 +53,7 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   useEffect(() => {
@@ -62,11 +64,7 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
   const vault = getVaultAddress()
   const chainSupported = chainId !== undefined && (SUPPORTED_CHAIN_IDS as readonly number[]).includes(chainId)
   const total = draw ? draw.ticketPrice * qty : 0
-  const now = Date.now()
-  const open =
-    draw?.status === 'open' &&
-    now >= new Date(draw.startTime).getTime() &&
-    now <= new Date(draw.closeTime).getTime()
+  const open = draw?.status === 'open'
 
   const buy = async () => {
     try {
@@ -133,8 +131,8 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
       }
       setStep('done')
       load()
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.message || 'Purchase failed')
+    } catch (e) {
+      setError(errorMessage(e, 'Purchase failed'))
       setStep('idle')
     }
   }

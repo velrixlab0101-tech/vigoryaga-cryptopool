@@ -17,7 +17,7 @@ export async function GET(
       },
     })
     return NextResponse.json(serialize(draw))
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch draw' }, { status: 500 })
   }
 }
@@ -69,7 +69,7 @@ export async function PATCH(
 
     const draw = await prisma.draw.update({ where: { id }, data })
     return NextResponse.json(serialize(draw))
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to update draw' }, { status: 500 })
   }
 }

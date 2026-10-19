@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json(serialize(tickets))
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
   }
 }

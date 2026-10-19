@@ -5,6 +5,8 @@ import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionRece
 import { motion } from 'framer-motion'
 import { isAdminAddress, getAdminWallet, buildAdminFetchHeaders } from '@/lib/admin-client'
 import { RAFFLE_VAULT_ABI, getVaultAddress, toUsdcUnits } from '@/lib/contracts'
+import { computePrizes, computePrizePool } from '@/lib/prizes'
+import { errorMessage } from '@/lib/errors'
 
 interface Ticket {
   id: string
@@ -23,8 +25,8 @@ interface Draw {
   status: string
   closeTime: string
   tickets: Ticket[]
-  winners: any[]
-  prizeStructure: any[]
+  winners: WinnerAssignment[]
+  prizeStructure: { tier: number; pct?: number; amount?: number }[]
   potTotal: number
   operatorPaid: boolean
   operatorTxHash: string | null
@@ -43,9 +45,34 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
   const { writeContractAsync } = useWriteContract()
   const [payoutHash, setPayoutHash] = useState<`0x${string}` | undefined>()
   const { isSuccess: payoutConfirmed } = useWaitForTransactionReceipt({ hash: payoutHash })
+  const aggregatePlayers = (tickets: Ticket[]) => {
+    const map = new Map<string, { wallet: string, qty: number, amount: number }>()
+    tickets.forEach((t) => {
+      const key = t.buyerAddress.toLowerCase()
+      const existing = map.get(key)
+      if (existing) {
+        map.set(key, {
+          wallet: t.buyerAddress,
+          qty: existing.qty + t.qty,
+          amount: existing.amount + t.amount,
+        })
+      } else {
+        map.set(key, {
+          wallet: t.buyerAddress,
+          qty: t.qty,
+          amount: t.amount,
+        })
+      }
+    })
+    const total = Array.from(map.values()).reduce((sum, p) => sum + p.amount, 0)
+    return Array.from(map.values())
+      .map((p) => ({ ...p, pct: total ? (p.amount / total) * 100 : 0 }))
+      .sort((a, b) => b.amount - a.amount)
+  }
+
   const [draw, setDraw] = useState<Draw | null>(null)
-  const [players, setPlayers] = useState<any[]>([])
-  const [prizeStructure, setPrizeStructure] = useState<any[]>([
+  const [players, setPlayers] = useState<{ wallet: string; qty: number; amount: number; pct: number }[]>([])
+  const [prizeStructure, setPrizeStructure] = useState<{ tier: number; pct?: number; amount?: number }[]>([
     { tier: 1, pct: 50 },
     { tier: 2, pct: 25 },
     { tier: 3, pct: 15 },
@@ -63,10 +90,10 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
         setDraw(d)
         setPrizeStructure(d.prizeStructure || prizeStructure)
         setOperatorFee(d.operatorFeePct || 10)
-        aggregatePlayers(d.tickets)
+        setPlayers(aggregatePlayers(d.tickets))
         if (Array.isArray(d.winners) && d.winners.length > 0) {
           setWinners(
-            d.winners.map((w: any) => ({
+            d.winners.map((w: WinnerAssignment) => ({
               place: w.place,
               wallet: w.wallet,
               amount: w.amount,
@@ -76,48 +103,20 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
         }
       })
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  
-  const aggregatePlayers = (tickets: Ticket[]) => {
-    const map = new Map<string, { wallet: string, qty: number, amount: number }>()
-    tickets.forEach((t) => {
-      const key = t.buyerAddress.toLowerCase()
-      if (map.has(key)) {
-        const existing = map.get(key)!
-        map.set(key, {
-          wallet: t.buyerAddress,
-          qty: existing.qty + t.qty,
-          amount: existing.amount + t.amount,
-        })
-      } else {
-        map.set(key, {
-          wallet: t.buyerAddress,
-          qty: t.qty,
-          amount: t.amount,
-        })
-      }
-    })
-    const total = Array.from(map.values()).reduce((sum, p) => sum + p.amount, 0)
-    const playersList = Array.from(map.values())
-      .map((p) => ({ ...p, pct: total ? (p.amount / total) * 100 : 0 }))
-      .sort((a, b) => b.amount - a.amount)
-    setPlayers(playersList)
-  }
   
   const calculatePrizes = () => {
     if (!draw) return
-    const totalPot = draw.potTotal
-    const prizePool = totalPot * (100 - operatorFee) / 100
+    const computed = computePrizes(draw.potTotal, operatorFee, prizeStructure, useFixed)
     const newWinners: WinnerAssignment[] = winners.map((w) => {
-      const tier = prizeStructure.find((t) => t.tier === w.place)
-      if (!tier) return w
-      const amount = useFixed ? (tier.amount || 0) : (prizePool * (tier.pct || 0) / 100)
-      return { ...w, amount: Number(amount.toFixed(2)) }
+      const match = computed.find((c) => c.place === w.place)
+      return match ? { ...w, amount: match.amount } : w
     })
     setWinners(newWinners)
   }
   
-  const assignWinner = (player: any, place: number) => {
+  const assignWinner = (player: { wallet: string; amount: number }, place: number) => {
     const existing = winners.find((w) => w.place === place)
     if (existing) {
       setWinners(winners.map((w) => (w.place === place ? { ...w, wallet: player.wallet, spent: player.amount } : w)))
@@ -158,8 +157,8 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
         return
       }
       location.reload()
-    } catch (e: any) {
-      setError(e?.message || 'Failed to declare winners')
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to declare winners'))
     }
   }
   
@@ -204,8 +203,8 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
         ],
       })
       setPayoutHash(hash)
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.message || 'Payout failed')
+    } catch (e) {
+      setError(errorMessage(e, 'Payout failed'))
     }
   }
 
@@ -223,6 +222,7 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
         if (res?.ok) location.reload()
       })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payoutConfirmed, payoutHash])
 
   const isAdmin = isAdminAddress(address)
@@ -233,7 +233,7 @@ export default function DrawResultsPage({ params }: { params: Promise<{ id: stri
   }
   
   const totalPct = prizeStructure.reduce((s, t) => s + (t.pct || 0), 0)
-  const prizePoolPreview = draw.potTotal * (100 - operatorFee) / 100
+  const prizePoolPreview = computePrizePool(draw.potTotal, operatorFee)
   const totalWinnersAmount = winners.reduce((s, w) => s + w.amount, 0)
   const operatorFeeAmount = draw.potTotal * operatorFee / 100
   

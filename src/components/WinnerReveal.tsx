@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Celebration } from '@/components/Celebration'
 
@@ -41,13 +41,10 @@ export function WinnerReveal({
 }) {
   const [revealed, setRevealed] = useState(autoReveal)
   const [copied, setCopied] = useState(false)
-  const [shareUrl, setShareUrl] = useState(sharePath)
-
-  useEffect(() => {
-    setShareUrl(`${window.location.origin}${sharePath}`)
-  }, [sharePath])
 
   const share = async () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const shareUrl = `${origin}${sharePath}`
     const text = `🎉 Winners of "${title}" — $${potTotal.toFixed(2)} USDC paid out on Base!`
     try {
       if (navigator.share) {

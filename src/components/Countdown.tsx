@@ -20,7 +20,6 @@ export function Countdown({ to, className = '' }: { to: string | Date; className
   const [t, setT] = useState(() => diff(target))
 
   useEffect(() => {
-    setT(diff(target))
     const id = setInterval(() => setT(diff(target)), 1000)
     return () => clearInterval(id)
   }, [target])

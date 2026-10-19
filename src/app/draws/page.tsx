@@ -11,7 +11,7 @@ interface Draw {
   status: string
   closeTime: string
   potTotal: number
-  tickets: any[]
+  tickets: unknown[]
 }
 
 export default function DrawsPage() {

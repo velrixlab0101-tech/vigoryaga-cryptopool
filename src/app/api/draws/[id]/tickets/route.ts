@@ -125,7 +125,7 @@ export async function POST(
     })
 
     return NextResponse.json({ success: true, ticket: serialize(ticket) })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to record ticket' }, { status: 500 })
   }
 }
