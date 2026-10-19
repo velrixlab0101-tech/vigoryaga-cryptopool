@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAdminAuth, adminUnauthorized } from '@/lib/admin-auth'
+import { serialize } from '@/lib/serialize'
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +16,7 @@ export async function GET(
         winners: true,
       },
     })
-    return NextResponse.json(draw)
+    return NextResponse.json(serialize(draw))
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch draw' }, { status: 500 })
   }
@@ -67,7 +68,7 @@ export async function PATCH(
     }
 
     const draw = await prisma.draw.update({ where: { id }, data })
-    return NextResponse.json(draw)
+    return NextResponse.json(serialize(draw))
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update draw' }, { status: 500 })
   }

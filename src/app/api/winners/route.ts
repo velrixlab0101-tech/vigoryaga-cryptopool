@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { serialize } from '@/lib/serialize'
 
 /**
  * Returns winners grouped by draw (newest draw first), each with its
@@ -35,11 +36,13 @@ export async function GET() {
     })
 
     return NextResponse.json(
+      serialize(
       draws.map((d) => ({
         ...d,
         winnerCount: d.winners.length,
-        totalAwarded: d.winners.reduce((s, w) => s + w.amount, 0),
+        totalAwarded: d.winners.reduce((s, w) => s + Number(w.amount), 0),
       })),
+      ),
     )
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch winners' }, { status: 500 })

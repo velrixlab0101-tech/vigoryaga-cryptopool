@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { decodeEventLog, type Log } from 'viem'
 import { prisma } from '@/lib/prisma'
+import { serialize } from '@/lib/serialize'
 import { clientForChain } from '@/lib/chain'
 import { RAFFLE_VAULT_ABI, getVaultAddress, fromUsdcUnits } from '@/lib/contracts'
 
@@ -87,7 +88,7 @@ export async function POST(
     if (amountDollars <= 0) {
       return NextResponse.json({ error: 'Invalid ticket amount' }, { status: 400 })
     }
-    const ticketPrice = draw.ticketPrice > 0 ? draw.ticketPrice : 1
+    const ticketPrice = Number(draw.ticketPrice) > 0 ? Number(draw.ticketPrice) : 1
     const qty = Math.round(amountDollars / ticketPrice)
     if (qty < 1 || Math.abs(qty * ticketPrice - amountDollars) > 1e-6) {
       return NextResponse.json({ error: 'Amount is not a multiple of ticket price' }, { status: 400 })
@@ -123,7 +124,7 @@ export async function POST(
       return created
     })
 
-    return NextResponse.json({ success: true, ticket })
+    return NextResponse.json({ success: true, ticket: serialize(ticket) })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to record ticket' }, { status: 500 })
   }

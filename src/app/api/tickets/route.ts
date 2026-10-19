@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { serialize } from '@/lib/serialize'
 
 /** Lists tickets for a wallet, newest first, with the parent draw summary. */
 export async function GET(request: NextRequest) {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(tickets)
+    return NextResponse.json(serialize(tickets))
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
   }

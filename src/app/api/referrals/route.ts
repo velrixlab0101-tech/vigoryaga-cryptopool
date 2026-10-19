@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { prisma } from '@/lib/prisma'
+import { serialize } from '@/lib/serialize'
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -45,15 +46,17 @@ export async function GET(request: NextRequest) {
       select: { buyerAddress: true, amount: true },
     })
     const signupCount = new Set(tickets.map((t) => t.buyerAddress)).size
-    const referredVolume = tickets.reduce((s, t) => s + t.amount, 0)
+    const referredVolume = tickets.reduce((s, t) => s + Number(t.amount), 0)
 
-    return NextResponse.json({
+    return NextResponse.json(
+      serialize({
       code: referral.code,
       ownerAddress: referral.ownerAddress,
       earnedCredits: referral.earnedCredits,
       signupCount,
       referredVolume,
-    })
+    }),
+    )
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch referral' }, { status: 500 })
   }

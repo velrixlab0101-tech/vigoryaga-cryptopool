@@ -24,7 +24,7 @@ export async function POST(
       return NextResponse.json({ error: 'Winners already declared' }, { status: 409 })
     }
     
-    const fee = parseFloat(operatorFeePct ?? draw.operatorFeePct)
+    const fee = parseFloat(String(operatorFeePct ?? Number(draw.operatorFeePct)))
     if (Number.isNaN(fee) || fee < 0 || fee > 50) {
       return NextResponse.json({ error: 'Operator fee must be 0–50%' }, { status: 400 })
     }

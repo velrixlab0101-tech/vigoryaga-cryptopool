@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!draw || draw.winners.length === 0) {
     return { title: 'Winners — CryptoPool' }
   }
-  const total = draw.winners.reduce((s, w) => s + w.amount, 0)
+  const total = draw.winners.reduce((s, w) => s + Number(w.amount), 0)
   const title = `Winners of ${draw.title} — CryptoPool`
   const description = `${draw.winners.length} winners shared $${total.toFixed(2)} USDC on Base. See the results.`
   const path = `/winners/${draw.id}`
@@ -58,8 +58,14 @@ export default async function DrawWinnersPage({ params }: Props) {
         <div className="mt-4">
           <WinnerReveal
             title={draw.title}
-            potTotal={draw.potTotal}
-            winners={draw.winners}
+            potTotal={Number(draw.potTotal)}
+            winners={draw.winners.map((w) => ({
+              place: w.place,
+              wallet: w.wallet,
+              amount: Number(w.amount),
+              spent: Number(w.spent),
+              txHash: w.txHash,
+            }))}
             sharePath={`/winners/${draw.id}`}
             autoReveal
           />
