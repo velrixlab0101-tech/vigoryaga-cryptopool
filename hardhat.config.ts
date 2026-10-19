@@ -1,7 +1,8 @@
-import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
+import { defineConfig } from "hardhat/config";
+import hardhatEthers from "@nomicfoundation/hardhat-ethers";
 
-const config: HardhatUserConfig = {
+export default defineConfig({
+  plugins: [hardhatEthers],
   solidity: {
     version: "0.8.24",
     settings: {
@@ -14,15 +15,13 @@ const config: HardhatUserConfig = {
   networks: {
     baseSepolia: {
       type: "http",
-      url: "https://sepolia.base.org",
+      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     base: {
       type: "http",
-      url: "https://mainnet.base.org",
+      url: process.env.BASE_RPC_URL || "https://mainnet.base.org",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },
-};
-
-export default config;
+});

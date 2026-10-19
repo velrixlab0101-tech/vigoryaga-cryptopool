@@ -36,6 +36,7 @@ contract RaffleVault is Ownable, ReentrancyGuard {
         require(winners.length <= 5, "Max 5 winners");
         uint256 total = operatorAmount;
         for (uint256 i = 0; i < amounts.length; i++) total += amounts[i];
+        require(usdc.balanceOf(address(this)) >= total, "Insufficient balance");
         for (uint256 i = 0; i < winners.length; i++) {
             if (winners[i] != address(0) && amounts[i] > 0) {
                 usdc.safeTransfer(winners[i], amounts[i]);
