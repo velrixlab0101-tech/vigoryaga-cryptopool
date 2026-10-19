@@ -1,9 +1,42 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 
+interface Draw {
+  id: string
+  title: string
+  ticketPrice: number
+  status: string
+  closeTime: string
+  potTotal: number
+  prizeStructure: { tier: number; pct?: number; amount?: number }[]
+  tickets: unknown[]
+}
+
 export default function Home() {
+  const [draw, setDraw] = useState<Draw | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/draws')
+      .then((r) => r.json())
+      .then((draws: Draw[]) => {
+        if (!Array.isArray(draws)) return
+        const active = draws.find((d) => d.status === 'open') ?? draws[0] ?? null
+        setDraw(active)
+      })
+      .finally(() => setLoaded(true))
+  }, [])
+
+  const split = draw?.prizeStructure?.length
+    ? draw.prizeStructure
+        .map((t) => (t.amount != null ? `$${t.amount}` : `${t.pct}%`))
+        .join(' / ')
+    : '50 / 25 / 15 / 7 / 3'
+  const href = draw ? `/draws/${draw.id}` : '/draws'
+
   return (
     <div className="min-h-screen">
       <section className="relative overflow-hidden py-20 px-4 sm:px-6 lg:px-8">
@@ -24,28 +57,32 @@ export default function Home() {
           >
             Daily USDC Lucky Draw • Transparent • On Base
           </motion.p>
-          
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.4 }}
             className="bg-surface rounded-2xl p-8 max-w-2xl mx-auto border border-accent/20 pulse-glow"
           >
-            <p className="text-foreground/70 mb-4">NEXT DRAW</p>
+            <p className="text-foreground/70 mb-4">
+              {draw ? (draw.status === 'open' ? 'CURRENT DRAW' : draw.status.toUpperCase()) : 'NEXT DRAW'}
+            </p>
             <div className="text-6xl sm:text-7xl font-bold text-accent mb-6 shimmer">
-              $1,000 USDC
+              ${draw ? draw.potTotal.toFixed(2) : '0.00'} USDC
             </div>
-            <p className="text-foreground/70 mb-8">5 Winners • 50/25/15/7/3 Split</p>
-            <Link 
-              href="/draws"
+            <p className="text-foreground/70 mb-2">{draw?.title ?? 'No draw yet'}</p>
+            <p className="text-foreground/70 mb-8">5 Winners • {split} Split</p>
+            <Link
+              href={href}
               className="inline-block bg-accent text-background font-bold px-8 py-4 rounded-lg text-lg hover:bg-accent/90 transition-colors pulse-glow"
             >
-              View Active Draws
+              {draw?.status === 'open' ? `Buy Tickets · $${draw?.ticketPrice} each` : 'View Active Draws'}
             </Link>
+            {!loaded && <p className="text-foreground/40 text-sm mt-4">Loading latest draw…</p>}
           </motion.div>
         </div>
       </section>
-      
+
       <section className="py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-3xl font-bold mb-8 text-center">How It Works</h2>
@@ -67,6 +104,11 @@ export default function Home() {
                 <p className="text-foreground/70">{item.desc}</p>
               </motion.div>
             ))}
+          </div>
+          <div className="text-center mt-10">
+            <Link href="/winners" className="text-accent hover:underline">
+              See past winners →
+            </Link>
           </div>
         </div>
       </section>
