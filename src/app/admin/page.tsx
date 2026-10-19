@@ -56,6 +56,26 @@ export default function AdminPage() {
   
   const isAdmin = isAdminAddress(address)
   const adminWallet = getAdminWallet()
+
+  const setStatus = async (drawId: string, status: 'open' | 'closed') => {
+    try {
+      setError('')
+      const headers = await buildAdminFetchHeaders(address, signMessageAsync)
+      const res = await fetch(`/api/draws/${drawId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.reason || data.error || 'Failed to update status')
+        return
+      }
+      location.reload()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update status')
+    }
+  }
   
   if (!isAdmin) {
     return (
@@ -140,7 +160,25 @@ export default function AdminPage() {
                   <h3 className="text-xl font-semibold">{draw.title}</h3>
                   <p className="text-foreground/70 text-sm">Status: {draw.status} • Tickets: {draw.tickets.length}</p>
                 </div>
-                <a href={`/admin/draw/${draw.id}`} className="text-accent hover:underline">Manage Results →</a>
+                <div className="flex items-center gap-3">
+                  {draw.status === 'draft' && (
+                    <button
+                      onClick={() => setStatus(draw.id, 'open')}
+                      className="bg-green-500/20 text-green-400 px-3 py-1 rounded text-sm hover:bg-green-500/30"
+                    >
+                      Launch
+                    </button>
+                  )}
+                  {draw.status === 'open' && (
+                    <button
+                      onClick={() => setStatus(draw.id, 'closed')}
+                      className="bg-red-500/20 text-red-400 px-3 py-1 rounded text-sm hover:bg-red-500/30"
+                    >
+                      Close
+                    </button>
+                  )}
+                  <a href={`/admin/draw/${draw.id}`} className="text-accent hover:underline">Manage Results →</a>
+                </div>
               </div>
             </div>
           ))}

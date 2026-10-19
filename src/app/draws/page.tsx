@@ -52,6 +52,14 @@ export default function DrawsPage() {
                   <span className="inline-block px-3 py-1 bg-accent/20 text-accent rounded-full text-sm">{draw.status}</span>
                 </div>
               </div>
+              {draw.status === 'open' && (
+                <Link
+                  href={`/draws/${draw.id}`}
+                  className="inline-block mt-4 bg-accent text-background px-5 py-2 rounded-lg font-semibold hover:bg-accent/90"
+                >
+                  Buy tickets →
+                </Link>
+              )}
             </motion.div>
           ))}
         </div>
