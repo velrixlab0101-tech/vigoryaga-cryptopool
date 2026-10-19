@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CryptoPool
 
-## Getting Started
+On-chain lucky-draw / raffle site. Players buy USDC tickets on **Base**; the
+operator declares 5 winners with editable descending prizes plus an operator
+fee. Tickets are recorded on-chain and verified server-side before they count.
 
-First, run the development server:
+- **Framework:** Next.js 16 (App Router, `proxy.ts` instead of middleware)
+- **Chain:** Base / Base Sepolia, USDC (`6` decimals)
+- **DB:** Postgres via Prisma 7 (Neon in production)
+- **Hosting:** Cloudflare Workers via `@opennextjs/cloudflare`
+- **Contracts:** Hardhat 3 (`contracts/RaffleVault.sol`)
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env        # fill in DATABASE_URL, admin wallet, vault address
+npm run dev                 # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Local Node dev talks to any Postgres using `@prisma/adapter-pg` (e.g. local
+Postgres). Production uses `@prisma/adapter-neon`; the adapter is selected at
+runtime in `src/lib/prisma.ts`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`prisma migrate dev` is disabled in Prisma 7 config mode, so migrations are
+applied explicitly:
 
-## Learn More
+```bash
+# create a new migration after editing prisma/schema.prisma
+npx prisma migrate dev --create-only --name my_change
 
-To learn more about Next.js, take a look at the following resources:
+# apply + regenerate the client
+DATABASE_URL="postgresql://..." npx prisma migrate deploy
+DATABASE_URL="postgresql://..." npx prisma generate
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Admin access
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Admin routes require a signature from the wallet in `NEXT_PUBLIC_ADMIN_WALLET`
+(or `ADMIN_WALLET`). Locally you can also send the `x-admin-token` header with
+the value of `ADMIN_DEV_TOKEN` (ignored in production).
 
-## Deploy on Vercel
+## Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Next dev server |
+| `npm run build` | Next production build |
+| `npm test` | Vitest unit tests |
+| `npm run lint` | ESLint |
+| `npm run contracts:compile` | Compile `RaffleVault` |
+| `npm run contracts:deploy:sepolia` | Deploy to Base Sepolia |
+| `npm run contracts:deploy:base` | Deploy to Base mainnet |
+| `npm run cf:preview` | Build + preview on the Workers runtime |
+| `npm run cf:deploy` | Build + deploy to Cloudflare |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Contracts
+
+`RaffleVault` holds USDC. `buyTickets` pulls USDC and emits `TicketSale`; the
+server verifies that event before crediting tickets. `payoutBatch` (owner only)
+pays up to 5 winners plus the operator fee in one transaction and emits
+`Payout` / `OperatorPayout`.
+
+```bash
+PRIVATE_KEY=0x... npm run contracts:deploy:sepolia
+# then set NEXT_PUBLIC_RAFFLE_VAULT to the printed address
+```
+
+## Deploying to Cloudflare + Neon
+
+1. **Neon:** create a project and copy the pooled connection string
+   (`...?sslmode=require`). Run migrations against it:
+   `DATABASE_URL="postgresql://..." npx prisma migrate deploy`.
+2. **Deploy the Worker:**
+   ```bash
+   npx wrangler login
+   npm run cf:deploy
+   ```
+   `wrangler.jsonc` enables the `nodejs_compat` flag. `npm run cf:preview`
+   runs the Worker locally first.
+3. **Secrets / vars:** set runtime values on the Worker:
+   ```bash
+   npx wrangler secret put DATABASE_URL
+   npx wrangler secret put REFERRAL_PCT
+   ```
+   `NEXT_PUBLIC_*` values are inlined at build time — put them in `.env` (or
+   `.dev.vars`) before `npm run cf:deploy`.
+4. **Local Worker secrets:** copy `.dev.vars.example` to `.dev.vars`.
+
+### Notes
+
+- The Node `pg` driver is excluded from the Worker bundle via
+  `outputFileTracingExcludes` in `next.config.ts`; only the Neon adapter runs
+  on Cloudflare.
+- `next build` logs non-fatal `indexedDB is not defined` warnings during
+  prerender from wallet-connector code; the build still succeeds.

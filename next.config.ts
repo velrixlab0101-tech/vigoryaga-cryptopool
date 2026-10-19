@@ -1,4 +1,7 @@
 import type { NextConfig } from 'next'
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
+
+initOpenNextCloudflareForDev()
 
 const csp = [
   "default-src 'self'",
@@ -30,6 +33,15 @@ const allowedOrigin = process.env.ALLOWED_API_ORIGIN || 'https://cryptopool.page
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // The Cloudflare Worker uses @prisma/adapter-neon; the Node `pg` driver is
+  // only needed for local Postgres dev. Keep it out of the traced server bundle.
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/pg/**/*',
+      'node_modules/pg-*/**/*',
+      'node_modules/@prisma/adapter-pg/**/*',
+    ],
+  },
   headers: async () => [
     { source: '/:path*', headers: securityHeaders },
     { source: '/admin/:path*', headers: noIndex },
