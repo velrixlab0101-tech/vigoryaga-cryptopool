@@ -3,22 +3,26 @@
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from 'wagmi'
+import { QRCodeSVG } from 'qrcode.react'
+import { useAccount, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import {
   ERC20_ABI,
-  RAFFLE_VAULT_ABI,
-  getUsdcAddress,
-  getVaultAddress,
-  toUsdcUnits,
-} from '@/lib/contracts'
-import { SUPPORTED_CHAIN_IDS } from '@/lib/chain'
+  PAYMENT_CHAIN_ID,
+  TOKENS,
+  TOKEN_SYMBOLS,
+  buildPaymentUri,
+  fromTokenUnits,
+  getPaymentAddress,
+  isTokenSymbol,
+  toTokenUnits,
+  type TokenSymbol,
+} from '@/lib/tokens'
 import { Countdown } from '@/components/Countdown'
 import { errorMessage } from '@/lib/errors'
 
 interface Draw {
   id: string
-  chainDrawId: number | null
   title: string
   ticketPrice: number
   operatorFeePct: number
@@ -26,10 +30,10 @@ interface Draw {
   startTime: string
   closeTime: string
   potTotal: number
-  tickets: { qty: number; amount: number; buyerAddress: string }[]
+  tickets: { qty: number; amount: number; buyerAddress?: string | null }[]
 }
 
-type Step = 'idle' | 'approving' | 'buying' | 'recording' | 'done'
+type Step = 'idle' | 'paying' | 'recording' | 'done'
 
 export default function DrawDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -41,9 +45,11 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
 
   const [draw, setDraw] = useState<Draw | null>(null)
   const [qty, setQty] = useState(1)
+  const [token, setToken] = useState<TokenSymbol>('USDC')
   const [step, setStep] = useState<Step>('idle')
   const [error, setError] = useState('')
-  const [txHash, setTxHash] = useState<string>('')
+  const [txHash, setTxHash] = useState('')
+  const [manualHash, setManualHash] = useState('')
 
   const load = () => {
     fetch(`/api/draws/${id}`)
@@ -61,78 +67,88 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
     if (ref) setReferrerCode(ref)
   }, [])
 
-  const vault = getVaultAddress()
-  const chainSupported = chainId !== undefined && (SUPPORTED_CHAIN_IDS as readonly number[]).includes(chainId)
+  const tokenConfig = TOKENS[token]
+  const paymentAddress = getPaymentAddress()
+  const chainSupported = chainId !== undefined && chainId === PAYMENT_CHAIN_ID
   const total = draw ? draw.ticketPrice * qty : 0
   const open = draw?.status === 'open'
 
-  const buy = async () => {
+  const { data: balance } = useReadContract({
+    address: tokenConfig.address,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  })
+  const balanceNum = typeof balance === 'bigint' ? fromTokenUnits(balance, tokenConfig.decimals) : 0
+  const insufficient = isConnected && balanceNum < total
+
+  const recordTx = async (hash: string) => {
+    if (!draw) return
+    setStep('recording')
+    const res = await fetch(`/api/draws/${draw.id}/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash: hash, token, referrerCode }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error || 'Failed to record ticket')
+      setStep('idle')
+      return
+    }
+    setStep('done')
+    load()
+  }
+
+  const pay = async () => {
     try {
       setError('')
       if (!draw || !address || !publicClient) return
-      if (!vault) {
-        setError('Vault address not configured')
-        return
-      }
-      if (draw.chainDrawId === null || draw.chainDrawId === undefined) {
-        setError('Draw has no on-chain id')
+      if (!paymentAddress) {
+        setError('Payment address not configured')
         return
       }
       if (!chainSupported) {
-        setError('Switch to a supported network first')
+        setError('Switch to BNB Smart Chain first')
         return
       }
       if (qty < 1) {
         setError('Choose at least one ticket')
         return
       }
-      const amount = toUsdcUnits(draw.ticketPrice * qty)
-      const usdc = getUsdcAddress(chainId)
-
-      const allowance = (await publicClient.readContract({
-        address: usdc,
-        abi: ERC20_ABI,
-        functionName: 'allowance',
-        args: [address, vault],
-      })) as bigint
-
-      if (allowance < amount) {
-        setStep('approving')
-        const approveHash = await writeContractAsync({
-          address: usdc,
-          abi: ERC20_ABI,
-          functionName: 'approve',
-          args: [vault, amount],
-        })
-        await publicClient.waitForTransactionReceipt({ hash: approveHash })
-      }
-
-      setStep('buying')
-      const buyHash = await writeContractAsync({
-        address: vault,
-        abi: RAFFLE_VAULT_ABI,
-        functionName: 'buyTickets',
-        args: [BigInt(draw.chainDrawId), amount],
-      })
-      setTxHash(buyHash)
-      await publicClient.waitForTransactionReceipt({ hash: buyHash })
-
-      setStep('recording')
-      const res = await fetch(`/api/draws/${draw.id}/tickets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash: buyHash, referrerCode }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.error || 'Failed to record ticket')
-        setStep('idle')
+      if (insufficient) {
+        setError(`Not enough ${token} balance`)
         return
       }
-      setStep('done')
-      load()
+      const amount = toTokenUnits(total, tokenConfig.decimals)
+
+      setStep('paying')
+      const hash = await writeContractAsync({
+        address: tokenConfig.address,
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [paymentAddress as `0x${string}`, amount],
+      })
+      setTxHash(hash)
+      await publicClient.waitForTransactionReceipt({ hash })
+      await recordTx(hash)
     } catch (e) {
-      setError(errorMessage(e, 'Purchase failed'))
+      setError(errorMessage(e, 'Payment failed'))
+      setStep('idle')
+    }
+  }
+
+  const submitManual = async () => {
+    try {
+      setError('')
+      if (!/^0x[a-fA-F0-9]{64}$/.test(manualHash.trim())) {
+        setError('Enter a valid transaction hash')
+        return
+      }
+      await recordTx(manualHash.trim())
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to record ticket'))
       setStep('idle')
     }
   }
@@ -141,7 +157,10 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
     return <div className="min-h-screen flex items-center justify-center text-foreground/70">Loading…</div>
   }
 
-  const busy = step === 'approving' || step === 'buying' || step === 'recording'
+  const busy = step === 'paying' || step === 'recording'
+  const paymentUri = paymentAddress
+    ? buildPaymentUri(tokenConfig, paymentAddress, total)
+    : ''
 
   return (
     <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
@@ -151,11 +170,11 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
         </Link>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
-            <h1 className="text-4xl font-bold">{draw.title}</h1>
-            <span className="px-3 py-1 bg-accent/20 text-accent rounded-full text-sm">{draw.status}</span>
+            <h1 className="min-w-0 break-words text-4xl font-bold">{draw.title}</h1>
+            <span className="shrink-0 px-3 py-1 bg-accent/20 text-accent rounded-full text-sm">{draw.status}</span>
           </div>
           <p className="text-foreground/70 mb-8">
-            Ticket ${draw.ticketPrice} USDC • Pot ${draw.potTotal.toFixed(2)} USDC • Closes{' '}
+            Ticket ${draw.ticketPrice} • Pot ${draw.potTotal.toFixed(2)} • Closes{' '}
             {new Date(draw.closeTime).toLocaleString()}
           </p>
           <div className="flex items-center gap-3 mb-8">
@@ -168,19 +187,48 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
           {step === 'done' ? (
             <div className="text-center py-6">
               <p className="text-2xl font-semibold text-accent mb-2">You&apos;re in! 🎟️</p>
-              <p className="text-foreground/70 mb-4">Your tickets were recorded on-chain.</p>
-              <button
-                onClick={() => {
-                  setStep('idle')
-                  setQty(1)
-                }}
-                className="bg-accent text-background px-6 py-2 rounded-lg font-semibold hover:bg-accent/90"
-              >
-                Buy more
-              </button>
+              <p className="text-foreground/70 mb-4">Your tickets were recorded.</p>
+              {txHash && (
+                <a
+                  href={`https://bscscan.com/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline text-sm"
+                >
+                  View transaction ↗
+                </a>
+              )}
+              <div className="mt-4">
+                <button
+                  onClick={() => {
+                    setStep('idle')
+                    setQty(1)
+                    setManualHash('')
+                  }}
+                  className="bg-accent text-background px-6 py-2 rounded-lg font-semibold hover:bg-accent/90"
+                >
+                  Buy more
+                </button>
+              </div>
             </div>
           ) : (
             <>
+              <div className="flex items-center justify-between mb-4">
+                <span>Payment token</span>
+                <div className="flex gap-2">
+                  {TOKEN_SYMBOLS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => isTokenSymbol(s) && setToken(s)}
+                      className={`px-3 py-1 rounded text-sm ${
+                        token === s ? 'bg-accent text-background' : 'bg-background border border-surface'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex items-center justify-between mb-4">
                 <span>Number of tickets</span>
                 <div className="flex items-center gap-3">
@@ -201,48 +249,99 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
               </div>
               <div className="flex items-center justify-between text-lg mb-6">
                 <span>Total</span>
-                <span className="font-bold text-accent">${total.toFixed(2)} USDC</span>
+                <span className="font-bold text-accent">
+                  {total.toFixed(2)} {token}
+                </span>
               </div>
 
-              {!isConnected ? (
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              ) : !chainSupported ? (
-                <button
-                  onClick={() => switchChainAsync({ chainId: 8453 })}
-                  className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90"
-                >
-                  Switch to Base
-                </button>
-              ) : !open ? (
+              {!open ? (
                 <p className="text-center text-foreground/70">
                   Ticket sales are {draw.status === 'open' ? 'closed' : draw.status}.
                 </p>
+              ) : !paymentAddress ? (
+                <p className="text-center text-yellow-400 text-sm">
+                  Payment address not configured (set NEXT_PUBLIC_PAYMENT_ADDRESS).
+                </p>
               ) : (
-                <button
-                  onClick={buy}
-                  disabled={busy || !vault}
-                  className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {step === 'approving'
-                    ? 'Approving USDC…'
-                    : step === 'buying'
-                      ? 'Confirming purchase…'
-                      : step === 'recording'
-                        ? 'Recording ticket…'
-                        : `Buy ${qty} ticket${qty > 1 ? 's' : ''} · $${total.toFixed(2)}`}
-                </button>
+                <>
+                  {isConnected && (
+                    <p className="text-xs text-foreground/50 mb-3 text-center">
+                      Balance: {balanceNum.toFixed(2)} {token}
+                      {insufficient && <span className="text-red-400"> — not enough</span>}
+                    </p>
+                  )}
+
+                  <div className="grid sm:grid-cols-[auto,1fr] gap-5 items-start mb-5">
+                    <div className="bg-white p-3 rounded-lg mx-auto">
+                      <QRCodeSVG value={paymentUri} size={148} />
+                    </div>
+                    <div className="text-sm">
+                      <p className="text-foreground/60 mb-1">Send exactly</p>
+                      <p className="text-xl font-bold text-accent mb-3">
+                        {total.toFixed(2)} {token}
+                      </p>
+                      <p className="text-foreground/60 mb-1">on BNB Smart Chain to</p>
+                      <code className="block break-all text-xs bg-background rounded p-2 mb-2">
+                        {paymentAddress}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(paymentAddress)}
+                        className="text-accent text-xs hover:underline"
+                      >
+                        Copy address
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isConnected ? (
+                    <div className="flex justify-center">
+                      <ConnectButton />
+                    </div>
+                  ) : !chainSupported ? (
+                    <button
+                      onClick={() => switchChainAsync({ chainId: PAYMENT_CHAIN_ID })}
+                      className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90"
+                    >
+                      Switch to BNB Smart Chain
+                    </button>
+                  ) : (
+                    <button
+                      onClick={pay}
+                      disabled={busy || insufficient}
+                      className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {step === 'paying'
+                        ? `Sending ${token}…`
+                        : step === 'recording'
+                          ? 'Recording ticket…'
+                          : `Pay ${total.toFixed(2)} ${token} with wallet`}
+                    </button>
+                  )}
+
+                  <div className="mt-5 pt-5 border-t border-surface">
+                    <p className="text-foreground/60 text-xs mb-2">
+                      Paid from another wallet? Paste the transaction hash to record it.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        value={manualHash}
+                        onChange={(e) => setManualHash(e.target.value)}
+                        placeholder="0x…"
+                        className="flex-1 bg-background border border-surface px-3 py-2 rounded-lg text-sm font-mono"
+                      />
+                      <button
+                        onClick={submitManual}
+                        disabled={busy}
+                        className="border border-accent/40 text-accent px-4 py-2 rounded-lg text-sm font-semibold hover:bg-accent/10 disabled:opacity-50"
+                      >
+                        Submit
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
 
-              {!vault && (
-                <p className="mt-3 text-xs text-yellow-400">
-                  Vault not configured (set NEXT_PUBLIC_RAFFLE_VAULT).
-                </p>
-              )}
-              {txHash && (
-                <p className="mt-3 text-xs text-foreground/50 break-all">tx: {txHash}</p>
-              )}
+              {txHash && <p className="mt-3 text-xs text-foreground/50 break-all">tx: {txHash}</p>}
               {error && <p className="mt-3 text-red-400 text-sm">{error}</p>}
             </>
           )}

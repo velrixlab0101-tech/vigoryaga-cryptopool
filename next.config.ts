@@ -5,7 +5,7 @@ initOpenNextCloudflareForDev()
 
 const csp = [
   "default-src 'self'",
-  "connect-src 'self' https://*.base.org https://mainnet.base.org https://sepolia.base.org https://*.walletconnect.com https://*.walletconnect.org https://explorer-api.walletconnect.com https://*.web3modal.com wss://*.walletconnect.com wss://*.walletconnect.org",
+  "connect-src 'self' https://*.binance.org https://bsc-dataseed.binance.org https://bsc-dataseed1.binance.org https://bsc-dataseed2.binance.org https://bsc-dataseed3.binance.org https://bsc-dataseed4.binance.org https://*.bscscan.com https://*.publicnode.com https://*.llamarpc.com https://*.walletconnect.com https://*.walletconnect.org https://explorer-api.walletconnect.com https://*.web3modal.com wss://*.walletconnect.com wss://*.walletconnect.org",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",

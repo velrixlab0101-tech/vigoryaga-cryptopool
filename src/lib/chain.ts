@@ -1,26 +1,25 @@
 import { createPublicClient, http } from 'viem'
-import { base, baseSepolia } from 'viem/chains'
+import { bsc } from 'viem/chains'
+import { PAYMENT_CHAIN_ID } from '@/lib/tokens'
 
-const baseRpc = process.env.BASE_RPC_URL || process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'
-const baseSepoliaRpc =
-  process.env.BASE_SEPOLIA_RPC_URL ||
-  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL ||
-  'https://sepolia.base.org'
+const bscRpc =
+  process.env.BSC_RPC_URL ||
+  process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+  process.env.BASE_RPC_URL ||
+  process.env.NEXT_PUBLIC_BASE_RPC_URL ||
+  'https://bsc-dataseed.binance.org'
 
 /**
- * Read-only clients used to verify on-chain ticket purchases.
- * mainnet hosted RPC left intentionally generic; override via env for a
+ * Read-only client used to verify on-chain deposits on BNB Smart Chain (BSC)
+ * mainnet. The public RPC is intentionally generic; override via env for a
  * private endpoint in production.
  */
-export const publicClient = createPublicClient({ chain: base, transport: http(baseRpc) })
-export const publicClientSepolia = createPublicClient({ chain: baseSepolia, transport: http(baseSepoliaRpc) })
+export const publicClient = createPublicClient({ chain: bsc, transport: http(bscRpc) })
 
 export function clientForChain(chainId: number) {
-  if (chainId === baseSepolia.id) return publicClientSepolia
-  if (chainId === base.id) return publicClient
-  return null
+  return chainId === PAYMENT_CHAIN_ID ? publicClient : null
 }
 
-export const SUPPORTED_CHAIN_IDS = [base.id, baseSepolia.id] as const
+export const SUPPORTED_CHAIN_IDS = [PAYMENT_CHAIN_ID] as const
 
-export { base, baseSepolia }
+export { bsc }

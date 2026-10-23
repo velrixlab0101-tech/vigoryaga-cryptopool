@@ -10,7 +10,9 @@ interface Ticket {
   id: string
   qty: number
   amount: number
+  token: string
   txHash: string
+  refundTxHash: string | null
   createdAt: string
   draw: {
     id: string
@@ -91,6 +93,7 @@ export default function MyTicketsPage() {
                     <th className="py-3 px-4">Draw</th>
                     <th className="py-3 px-4 text-right">Qty</th>
                     <th className="py-3 px-4 text-right">Amount</th>
+                    <th className="py-3 px-4">Token</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4 text-right">Tx</th>
@@ -106,9 +109,10 @@ export default function MyTicketsPage() {
                       </td>
                       <td className="py-3 px-4 text-right">{t.qty}</td>
                       <td className="py-3 px-4 text-right">${t.amount.toFixed(2)}</td>
+                      <td className="py-3 px-4">{t.token || 'USDC'}</td>
                       <td className="py-3 px-4">
                         <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs">
-                          {t.draw.status}
+                          {t.refundTxHash ? 'refunded' : t.draw.status}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-foreground/60">
@@ -116,7 +120,7 @@ export default function MyTicketsPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <a
-                          href={`https://basescan.org/tx/${t.txHash}`}
+                          href={`https://bscscan.com/tx/${t.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-accent hover:underline"

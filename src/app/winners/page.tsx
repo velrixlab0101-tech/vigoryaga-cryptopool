@@ -1,22 +1,25 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Celebration } from '@/components/Celebration'
+import { ordinal } from '@/lib/mask'
 
 interface Winner {
   id: string
   place: number
   wallet: string
+  displayName: string
   amount: number
   spent: number
+  token: string | null
   txHash: string | null
 }
 
 interface DrawWinners {
   id: string
-  chainDrawId: number | null
   title: string
   potTotal: number
   status: string
@@ -26,7 +29,12 @@ interface DrawWinners {
   totalAwarded: number
 }
 
-const ordinal = (n: number) => (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th')
+interface Pagination {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
 
 const PLACE_STYLES: Record<number, string> = {
   1: 'from-yellow-400/30 to-yellow-600/10 border-yellow-400/40',
@@ -36,25 +44,58 @@ const PLACE_STYLES: Record<number, string> = {
   5: 'from-accent/15 to-accent/5 border-accent/30',
 }
 
-function short(addr: string) {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+/** Compact page list with ellipses, e.g. 1 … 4 [5] 6 … 20. */
+function pageWindow(current: number, total: number): (number | '…')[] {
+  const pages = new Set<number>([1, total, current, current - 1, current + 1])
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
+  const out: (number | '…')[] = []
+  let prev = 0
+  for (const p of sorted) {
+    if (prev && p - prev > 1) out.push('…')
+    out.push(p)
+    prev = p
+  }
+  return out
 }
 
-export default function WinnersPage() {
+function WinnersContent() {
+  const searchParams = useSearchParams()
+  const initialPage = Math.max(1, Number(searchParams.get('page') ?? '1') || 1)
   const [draws, setDraws] = useState<DrawWinners[]>([])
+  const [pagination, setPagination] = useState<Pagination | null>(null)
+  const [page, setPage] = useState(initialPage)
   const [loading, setLoading] = useState(true)
   const [revealed, setRevealed] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/winners')
+  const load = useCallback((target: number) => {
+    setLoading(true)
+    setRevealed(false)
+    fetch(`/api/winners?page=${target}`)
       .then((r) => r.json())
       .then((d) => {
-        if (Array.isArray(d)) setDraws(d)
+        const rows = Array.isArray(d) ? d : (d?.draws ?? [])
+        setDraws(Array.isArray(rows) ? rows : [])
+        if (d?.pagination) setPagination(d.pagination)
       })
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    load(page)
+  }, [page, load])
+
+  useEffect(() => {
+    if (pagination && page > pagination.totalPages) setPage(pagination.totalPages)
+  }, [pagination, page])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.history.replaceState(null, '', page > 1 ? `/winners?page=${page}` : '/winners')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [page])
+
   const latest = draws[0]
+  const rest = draws.slice(1)
 
   return (
     <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
@@ -64,10 +105,16 @@ export default function WinnersPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-4xl sm:text-5xl font-bold mb-2 text-center"
         >
-          Winners
+          Winners <span className="gradient-text">history</span>
         </motion.h1>
-        <p className="text-center text-foreground/70 mb-10">
-          Every payout is a public on-chain transfer on Base.
+        <p className="text-center text-foreground/70 mb-4">
+          Every payout is a public on-chain transfer on BNB Smart Chain. Winners are shown with a display
+          name and a shortened address for privacy.
+        </p>
+        <p className="text-center mb-10">
+          <Link href="/history" className="text-accent text-sm hover:underline">
+            Full draw history (pots, players, refunds) →
+          </Link>
         </p>
 
         {loading ? (
@@ -137,13 +184,15 @@ export default function WinnersPage() {
                             <div className="text-2xl font-bold text-accent mb-1">
                               ${w.amount.toFixed(2)}
                             </div>
-                            <div className="font-mono text-xs text-foreground/70">{short(w.wallet)}</div>
+                            <div className="text-[11px] text-foreground/50 mb-1">{w.token || 'USDC'}</div>
+                            <div className="truncate text-sm font-semibold">{w.displayName}</div>
+                            <div className="truncate font-mono text-[11px] text-foreground/50">{w.wallet}</div>
                             <div className="text-[11px] text-foreground/50 mt-1">
                               Spent ${w.spent.toFixed(2)} · Net +${w.amount.toFixed(2)}
                             </div>
                             {w.txHash && (
                               <a
-                                href={`https://basescan.org/tx/${w.txHash}`}
+                                href={`https://bscscan.com/tx/${w.txHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="block text-[11px] text-accent/80 hover:underline mt-1"
@@ -162,11 +211,11 @@ export default function WinnersPage() {
               </div>
             </section>
 
-            {draws.slice(1).map((d) => (
+            {rest.map((d) => (
               <section key={d.id} className="mb-8">
-                <h3 className="text-lg font-semibold mb-3">
-                  {d.title}
-                  <span className="text-foreground/50 text-sm font-normal ml-2">
+                <h3 className="mb-3 flex flex-wrap items-baseline gap-x-2 text-lg font-semibold">
+                  <span className="min-w-0 truncate">{d.title}</span>
+                  <span className="text-sm font-normal text-foreground/50">
                     {new Date(d.createdAt).toLocaleDateString()} · ${d.totalAwarded.toFixed(2)} awarded
                   </span>
                 </h3>
@@ -175,7 +224,7 @@ export default function WinnersPage() {
                     <thead>
                       <tr className="text-foreground/50 text-left">
                         <th className="py-2 px-4">Place</th>
-                        <th className="py-2 px-4">Wallet</th>
+                        <th className="py-2 px-4">Winner</th>
                         <th className="py-2 px-4 text-right">Prize</th>
                         <th className="py-2 px-4 text-right">Spent</th>
                         <th className="py-2 px-4 text-right">Tx</th>
@@ -188,13 +237,18 @@ export default function WinnersPage() {
                             {w.place}
                             {ordinal(w.place)}
                           </td>
-                          <td className="py-2 px-4 font-mono text-xs">{short(w.wallet)}</td>
-                          <td className="py-2 px-4 text-right text-accent">${w.amount.toFixed(2)}</td>
+                          <td className="py-2 px-4">
+                            <div className="font-medium leading-tight">{w.displayName}</div>
+                            <div className="font-mono text-[11px] text-foreground/50">{w.wallet}</div>
+                          </td>
+                          <td className="py-2 px-4 text-right text-accent">
+                            ${w.amount.toFixed(2)} {w.token || 'USDC'}
+                          </td>
                           <td className="py-2 px-4 text-right text-foreground/60">${w.spent.toFixed(2)}</td>
                           <td className="py-2 px-4 text-right">
                             {w.txHash ? (
                               <a
-                                href={`https://basescan.org/tx/${w.txHash}`}
+                                href={`https://bscscan.com/tx/${w.txHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-accent hover:underline"
@@ -212,9 +266,69 @@ export default function WinnersPage() {
                 </div>
               </section>
             ))}
+
+            {pagination && pagination.totalPages > 1 && (
+              <nav
+                aria-label="Winners pages"
+                className="mt-10 flex flex-wrap items-center justify-center gap-2"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="border border-accent/30 text-foreground px-4 py-2 rounded-lg text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ← Previous
+                </button>
+                {pageWindow(page, pagination.totalPages).map((p, i) =>
+                  p === '…' ? (
+                    <span key={`gap-${i}`} className="px-1 text-foreground/40">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPage(p)}
+                      aria-current={p === page ? 'page' : undefined}
+                      className={
+                        p === page
+                          ? 'bg-accent text-background px-4 py-2 rounded-lg text-sm font-semibold min-w-10'
+                          : 'border border-accent/30 text-foreground px-4 py-2 rounded-lg text-sm hover:bg-accent/10 min-w-10'
+                      }
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                  disabled={page >= pagination.totalPages}
+                  className="border border-accent/30 text-foreground px-4 py-2 rounded-lg text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next →
+                </button>
+                <span className="w-full text-center text-xs text-foreground/50 sm:w-auto sm:pl-3">
+                  Page {page} of {pagination.totalPages} · {pagination.total} draws
+                </span>
+              </nav>
+            )}
           </>
         )}
       </div>
     </div>
+  )
+}
+
+export default function WinnersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen py-20 text-center text-foreground/60">Loading…</div>
+      }
+    >
+      <WinnersContent />
+    </Suspense>
   )
 }

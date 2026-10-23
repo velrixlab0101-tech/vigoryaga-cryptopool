@@ -8,7 +8,6 @@ datasource db {
 
 model Draw {
   id                String    @id @default(cuid())
-  chainDrawId       Int?      @unique
   title             String
   ticketPrice       Decimal   @default(1) @db.Decimal(20, 6)
   operatorFeePct    Decimal   @default(10) @db.Decimal(5, 2)
@@ -19,6 +18,7 @@ model Draw {
   potTotal          Decimal   @default(0) @db.Decimal(20, 6)
   operatorPaid      Boolean   @default(false)
   operatorTxHash    String?
+  cancelledAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   tickets           Ticket[]
@@ -26,15 +26,21 @@ model Draw {
 }
 
 model Ticket {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   drawId       String
   buyerAddress String
-  txHash       String   @unique
+  txHash       String
+  chainId      Int       @default(56)
+  token        String    @default("USDC")
   qty          Int
-  amount       Decimal  @db.Decimal(20, 6)
+  amount       Decimal   @db.Decimal(20, 6)
   referrerCode String?
-  createdAt    DateTime @default(now())
-  draw         Draw     @relation(fields: [drawId], references: [id])
+  refundTxHash String?
+  refundedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  draw         Draw      @relation(fields: [drawId], references: [id])
+
+  @@unique([chainId, txHash])
 }
 
 model Winner {
@@ -44,6 +50,7 @@ model Winner {
   wallet       String
   amount       Decimal  @db.Decimal(20, 6)
   spent        Decimal  @default(0) @db.Decimal(20, 6)
+  token        String?
   txHash       String?
   createdAt    DateTime @default(now())
   draw         Draw     @relation(fields: [drawId], references: [id])

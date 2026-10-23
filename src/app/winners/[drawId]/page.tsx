@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { WinnerReveal } from '@/components/WinnerReveal'
+import { displayName, maskAddress } from '@/lib/mask'
 
 interface Props {
   params: Promise<{ drawId: string }>
@@ -33,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   const total = draw.winners.reduce((s, w) => s + Number(w.amount), 0)
   const title = `Winners of ${draw.title} — CryptoPool`
-  const description = `${draw.winners.length} winners shared $${total.toFixed(2)} USDC on Base. See the results.`
+  const description = `${draw.winners.length} winners shared $${total.toFixed(2)} in prizes on BNB Smart Chain. See the results.`
   const path = `/winners/${draw.id}`
   return {
     title,
@@ -61,7 +62,8 @@ export default async function DrawWinnersPage({ params }: Props) {
             potTotal={Number(draw.potTotal)}
             winners={draw.winners.map((w) => ({
               place: w.place,
-              wallet: w.wallet,
+              wallet: maskAddress(w.wallet),
+              displayName: displayName(w.wallet),
               amount: Number(w.amount),
               spent: Number(w.spent),
               txHash: w.txHash,

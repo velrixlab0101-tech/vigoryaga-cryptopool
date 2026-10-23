@@ -3,16 +3,16 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Celebration } from '@/components/Celebration'
+import { ordinal } from '@/lib/mask'
 
 export interface RevealWinner {
   place: number
   wallet: string
+  displayName: string
   amount: number
   spent: number
   txHash: string | null
 }
-
-const ordinal = (n: number) => (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th')
 
 const PLACE_STYLES: Record<number, string> = {
   1: 'from-yellow-400/30 to-yellow-600/10 border-yellow-400/40',
@@ -20,10 +20,6 @@ const PLACE_STYLES: Record<number, string> = {
   3: 'from-amber-600/25 to-amber-800/10 border-amber-600/40',
   4: 'from-accent/15 to-accent/5 border-accent/30',
   5: 'from-accent/15 to-accent/5 border-accent/30',
-}
-
-function short(addr: string) {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
 }
 
 export function WinnerReveal({
@@ -45,7 +41,7 @@ export function WinnerReveal({
   const share = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const shareUrl = `${origin}${sharePath}`
-    const text = `🎉 Winners of "${title}" — $${potTotal.toFixed(2)} USDC paid out on Base!`
+    const text = `🎉 Winners of "${title}" — $${potTotal.toFixed(2)} paid out on BNB Smart Chain!`
     try {
       if (navigator.share) {
         await navigator.share({ title: 'CryptoPool Winners', text, url: shareUrl })
@@ -108,13 +104,14 @@ export function WinnerReveal({
                 {revealed && w ? (
                   <>
                     <div className="text-2xl font-bold text-accent mb-1">${w.amount.toFixed(2)}</div>
-                    <div className="font-mono text-xs text-foreground/70">{short(w.wallet)}</div>
+                    <div className="truncate text-sm font-semibold">{w.displayName}</div>
+                    <div className="truncate font-mono text-[11px] text-foreground/50">{w.wallet}</div>
                     <div className="text-[11px] text-foreground/50 mt-1">
                       Spent ${w.spent.toFixed(2)} · Net +${w.amount.toFixed(2)}
                     </div>
                     {w.txHash && (
                       <a
-                        href={`https://basescan.org/tx/${w.txHash}`}
+                        href={`https://bscscan.com/tx/${w.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="block text-[11px] text-accent/80 hover:underline mt-1"

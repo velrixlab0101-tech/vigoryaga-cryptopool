@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAdminAuth, adminUnauthorized } from '@/lib/admin-auth'
 import { serialize } from '@/lib/serialize'
+import { publicizeWinners, anonymizeTickets, uniqueBuyers } from '@/lib/mask'
 
+/**
+ * Single draw. Winner wallets and ticket buyer addresses are removed entirely
+ * unless the caller is the authenticated admin (who needs full addresses for
+ * payouts). `uniquePlayers` is computed before stripping.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,7 +22,17 @@ export async function GET(
         winners: true,
       },
     })
-    return NextResponse.json(serialize(draw))
+    if (!draw) return NextResponse.json({ error: 'Draw not found' }, { status: 404 })
+    const auth = await verifyAdminAuth(request.headers)
+    const payload = auth.ok
+      ? draw
+      : {
+          ...draw,
+          winners: publicizeWinners(draw.winners),
+          uniquePlayers: uniqueBuyers(draw.tickets),
+          tickets: anonymizeTickets(draw.tickets),
+        }
+    return NextResponse.json(serialize(payload))
   } catch {
     return NextResponse.json({ error: 'Failed to fetch draw' }, { status: 500 })
   }

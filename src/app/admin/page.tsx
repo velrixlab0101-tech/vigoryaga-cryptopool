@@ -117,7 +117,7 @@ export default function AdminPage() {
               />
               <input
                 type="number"
-                placeholder="Ticket Price (USDC)"
+                placeholder="Ticket Price (USD)"
                 value={form.ticketPrice}
                 onChange={e => setForm({ ...form, ticketPrice: e.target.value })}
                 className="bg-background border border-surface p-3 rounded-lg"

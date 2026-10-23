@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
             title: true,
             status: true,
             closeTime: true,
-            chainDrawId: true,
           },
         },
       },

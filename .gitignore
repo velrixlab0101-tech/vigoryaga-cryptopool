@@ -43,11 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# hardhat
-/artifacts/
-/cache/
-/typechain-types/
-
 # cloudflare / opennext
 /.open-next/
 /.wrangler/

@@ -26,11 +26,11 @@ export default function DrawsPage() {
   
   return (
     <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="container-page">
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-4xl font-bold mb-8"
+          className="mb-8 text-4xl font-bold tracking-tight"
         >
           Active Draws
         </motion.h1>
@@ -42,16 +42,16 @@ export default function DrawsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="bg-surface rounded-xl p-6 border border-accent/20"
+              className="card card-hover p-6"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-2">{draw.title}</h2>
-                  <p className="text-foreground/70">Ticket: ${draw.ticketPrice} USDC • Tickets: {draw.tickets?.length || 0}</p>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="mb-2 text-2xl font-semibold break-words">{draw.title}</h2>
+                  <p className="text-foreground/70">Ticket: ${draw.ticketPrice} • Tickets: {draw.tickets?.length || 0}</p>
                   <p className="text-foreground/70">Closes: {new Date(draw.closeTime).toLocaleString()}</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-accent mb-2">${draw.potTotal} USDC</div>
+                <div className="shrink-0 text-right">
+                  <div className="text-3xl font-bold text-accent mb-2">${draw.potTotal}</div>
                   <span className="inline-block px-3 py-1 bg-accent/20 text-accent rounded-full text-sm">{draw.status}</span>
                 </div>
               </div>

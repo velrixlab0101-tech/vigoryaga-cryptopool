@@ -1,23 +1,32 @@
 import { describe, it, expect } from 'vitest'
-import { toUsdcUnits, fromUsdcUnits, USDC_DECIMALS } from '@/lib/contracts'
+import { toTokenUnits, fromTokenUnits, TOKENS, buildPaymentUri } from '@/lib/tokens'
 import { computePrizePool, computePrizes, clampOperatorFee, totalTierPercent } from '@/lib/prizes'
 import { normalizeWallet, isAdminAddress } from '@/lib/admin-wallet'
 
-describe('USDC units', () => {
-  it('uses 6 decimals', () => {
-    expect(USDC_DECIMALS).toBe(6)
+describe('token units', () => {
+  it('uses 18 decimals for both tokens on BSC', () => {
+    expect(TOKENS.USDC.decimals).toBe(18)
+    expect(TOKENS.USDT.decimals).toBe(18)
   })
 
   it('converts dollars to base units', () => {
-    expect(toUsdcUnits(1)).toBe(BigInt(1_000_000))
-    expect(toUsdcUnits(0.5)).toBe(BigInt(500_000))
-    expect(toUsdcUnits(12.34)).toBe(BigInt(12_340_000))
+    expect(toTokenUnits(1, 6)).toBe(BigInt(1_000_000))
+    expect(toTokenUnits(0.5, 6)).toBe(BigInt(500_000))
+    expect(toTokenUnits(12.34, 6)).toBe(BigInt(12_340_000))
+    expect(toTokenUnits(1, 18)).toBe(BigInt(1_000_000_000_000_000_000))
   })
 
   it('round-trips whole and fractional amounts', () => {
     for (const v of [1, 0.25, 12.5, 999.999999]) {
-      expect(fromUsdcUnits(toUsdcUnits(v))).toBeCloseTo(v, 6)
+      expect(fromTokenUnits(toTokenUnits(v, 18), 18)).toBeCloseTo(v, 6)
     }
+  })
+
+  it('builds an EIP-681 BSC payment URI', () => {
+    const uri = buildPaymentUri(TOKENS.USDC, '0x0000000000000000000000000000000000000001', 2)
+    expect(uri).toContain('ethereum:0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d@56/transfer')
+    expect(uri).toContain('address=0x0000000000000000000000000000000000000001')
+    expect(uri).toContain('uint256=2000000000000000000')
   })
 })
 

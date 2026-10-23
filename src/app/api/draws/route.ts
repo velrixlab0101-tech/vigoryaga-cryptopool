@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAdminAuth, adminUnauthorized } from '@/lib/admin-auth'
 import { serialize } from '@/lib/serialize'
+import { publicizeWinners, anonymizeTickets, uniqueBuyers } from '@/lib/mask'
 
-export async function GET() {
+/**
+ * List draws. Winner wallets and ticket buyer addresses are removed entirely
+ * unless the caller is the authenticated admin — public visitors never see
+ * participant addresses. `uniquePlayers` is computed before stripping so the
+ * count stays exact.
+ */
+export async function GET(request: NextRequest) {
   try {
     const draws = await prisma.draw.findMany({
       orderBy: { createdAt: 'desc' },
@@ -12,7 +19,16 @@ export async function GET() {
         winners: true,
       },
     })
-    return NextResponse.json(serialize(draws))
+    const auth = await verifyAdminAuth(request.headers)
+    const payload = auth.ok
+      ? draws
+      : draws.map((d) => ({
+          ...d,
+          winners: publicizeWinners(d.winners),
+          uniquePlayers: uniqueBuyers(d.tickets),
+          tickets: anonymizeTickets(d.tickets),
+        }))
+    return NextResponse.json(serialize(payload))
   } catch {
     return NextResponse.json({ error: 'Failed to fetch draws' }, { status: 500 })
   }
@@ -46,15 +62,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Close time must be after start time' }, { status: 400 })
     }
 
-    const last = await prisma.draw.findFirst({
-      orderBy: { chainDrawId: 'desc' },
-      select: { chainDrawId: true },
-    })
-    const chainDrawId = (last?.chainDrawId ?? 0) + 1
-
     const draw = await prisma.draw.create({
       data: {
-        chainDrawId,
         title: title.trim(),
         ticketPrice: price,
         operatorFeePct: fee,

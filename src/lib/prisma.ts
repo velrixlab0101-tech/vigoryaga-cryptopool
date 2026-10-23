@@ -10,7 +10,9 @@ const isCloudflareWorker =
 async function createClient() {
   const connectionString = process.env.DATABASE_URL
 
-  if (isCloudflareWorker) {
+  // Cloudflare Workers and Neon both need the serverless driver: plain TCP
+  // to Neon's pooler is rejected from many networks (P1017 ConnectionClosed).
+  if (isCloudflareWorker || /neon\.tech/.test(connectionString ?? '')) {
     const { PrismaNeon } = await import('@prisma/adapter-neon')
     return new PrismaClient({ adapter: new PrismaNeon({ connectionString }) })
   }
