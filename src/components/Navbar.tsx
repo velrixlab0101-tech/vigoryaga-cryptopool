@@ -2,18 +2,20 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import dynamic from 'next/dynamic'
 import { useAccount } from 'wagmi'
 import { isAdminAddress } from '@/lib/admin-client'
 
+const ConnectButton = dynamic(() => import('@rainbow-me/rainbowkit').then(m => m.ConnectButton), { ssr: false })
+
 const LINKS = [
-  { href: '/draws', label: 'Draws' },
+  { href: '/lotteries', label: 'Lotteries' },
+  { href: '/draws', label: 'Classic' },
   { href: '/history', label: 'History' },
   { href: '/winners', label: 'Winners' },
-  { href: '/my-tickets', label: 'My Tickets' },
-  { href: '/referrals', label: 'Referrals' },
+  { href: '/my-tickets', label: 'My Entries' },
 ] as const
 
 const ADMIN_LINK = { href: '/admin', label: 'Admin' } as const
@@ -21,7 +23,15 @@ const ADMIN_LINK = { href: '/admin', label: 'Admin' } as const
 export default function Navbar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const { address } = useAccount()
+  let address: string | undefined
+  try {
+    const acc = useAccount()
+    address = acc?.address
+  } catch {
+    address = undefined
+  }
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
   const links = isAdminAddress(address) ? [...LINKS, ADMIN_LINK] : [...LINKS]
 
   const isActive = (href: string) =>
@@ -34,6 +44,21 @@ export default function Navbar() {
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       className="sticky top-0 z-50 glass border-b border-border/70"
     >
+      <Link
+        href="/draws"
+        className="group relative flex items-center justify-center gap-2 overflow-hidden border-b border-accent/20 bg-gradient-to-r from-accent/15 via-accent/25 to-accent-2/15 px-4 py-2 text-center"
+      >
+        <span className="relative inline-flex items-center gap-2 text-xs font-semibold tracking-wide sm:text-sm">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-accent/20 text-[10px]">🛡️</span>
+          <span className="shimmer font-bold">
+            Get 50% back on your first 5 losing draws
+          </span>
+          <span className="hidden text-accent transition-transform group-hover:translate-x-0.5 sm:inline">
+            →
+          </span>
+        </span>
+      </Link>
+
       <div className="container-page">
         <div className="flex h-16 items-center justify-between gap-4">
           <Link href="/" className="group flex items-center gap-2.5">
@@ -69,11 +94,15 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
-            <ConnectButton
-              showBalance={false}
-              chainStatus="icon"
-              accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }}
-            />
+            {mounted ? (
+              <ConnectButton
+                showBalance={false}
+                chainStatus="icon"
+                accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }}
+              />
+            ) : (
+              <div className="h-10 w-32 rounded-full bg-surface-2" />
+            )}
             <button
               onClick={() => setOpen((v) => !v)}
               aria-label="Toggle menu"
@@ -118,3 +147,4 @@ export default function Navbar() {
     </motion.nav>
   )
 }
+

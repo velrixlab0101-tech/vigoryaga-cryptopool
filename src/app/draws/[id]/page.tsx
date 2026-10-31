@@ -4,8 +4,9 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
-import { useAccount, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from 'wagmi'
+import { useAccount, usePublicClient, useReadContract, useSignMessage, useSwitchChain, useWriteContract } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { REDEEM_PURPOSE, buildWalletFetchHeaders } from '@/lib/wallet-client'
 import {
   ERC20_ABI,
   PAYMENT_CHAIN_ID,
@@ -42,6 +43,7 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
   const publicClient = usePublicClient()
   const { switchChainAsync } = useSwitchChain()
   const { writeContractAsync } = useWriteContract()
+  const { signMessageAsync } = useSignMessage()
 
   const [draw, setDraw] = useState<Draw | null>(null)
   const [qty, setQty] = useState(1)
@@ -50,6 +52,7 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
   const [error, setError] = useState('')
   const [txHash, setTxHash] = useState('')
   const [manualHash, setManualHash] = useState('')
+  const [creditBalance, setCreditBalance] = useState(0)
 
   const load = () => {
     fetch(`/api/draws/${id}`)
@@ -66,6 +69,19 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
     const ref = new URLSearchParams(window.location.search).get('ref')
     if (ref) setReferrerCode(ref)
   }, [])
+
+  useEffect(() => {
+    if (!address) {
+      setCreditBalance(0)
+      return
+    }
+    fetch(`/api/credits?wallet=${address}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && typeof d.balance === 'number') setCreditBalance(d.balance)
+      })
+      .catch(() => {})
+  }, [address, step])
 
   const tokenConfig = TOKENS[token]
   const paymentAddress = getPaymentAddress()
@@ -153,6 +169,41 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  const payWithCredit = async () => {
+    try {
+      setError('')
+      if (!draw || !address) return
+      if (qty < 1) {
+        setError('Choose at least one ticket')
+        return
+      }
+      if (creditBalance + 1e-6 < total) {
+        setError('Not enough credit — choose fewer tickets or pay with wallet')
+        return
+      }
+      setStep('recording')
+      const headers = await buildWalletFetchHeaders(address, REDEEM_PURPOSE, signMessageAsync)
+      const res = await fetch(`/api/draws/${draw.id}/tickets/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ wallet: address, qty }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Failed to redeem credit')
+        setStep('idle')
+        return
+      }
+      setStep('done')
+      load()
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to redeem credit'))
+      setStep('idle')
+    }
+  }
+
+  const creditCovers = creditBalance + 1e-6 >= total
+
   if (!draw) {
     return <div className="min-h-screen flex items-center justify-center text-foreground/70">Loading…</div>
   }
@@ -188,7 +239,7 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
             <div className="text-center py-6">
               <p className="text-2xl font-semibold text-accent mb-2">You&apos;re in! 🎟️</p>
               <p className="text-foreground/70 mb-4">Your tickets were recorded.</p>
-              {txHash && (
+              {txHash && !txHash.startsWith('credit:') && (
                 <a
                   href={`https://bscscan.com/tx/${txHash}`}
                   target="_blank"
@@ -297,25 +348,40 @@ export default function DrawDetailPage({ params }: { params: Promise<{ id: strin
                     <div className="flex justify-center">
                       <ConnectButton />
                     </div>
-                  ) : !chainSupported ? (
-                    <button
-                      onClick={() => switchChainAsync({ chainId: PAYMENT_CHAIN_ID })}
-                      className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90"
-                    >
-                      Switch to BNB Smart Chain
-                    </button>
                   ) : (
-                    <button
-                      onClick={pay}
-                      disabled={busy || insufficient}
-                      className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {step === 'paying'
-                        ? `Sending ${token}…`
-                        : step === 'recording'
-                          ? 'Recording ticket…'
-                          : `Pay ${total.toFixed(2)} ${token} with wallet`}
-                    </button>
+                    <>
+                      {creditBalance > 0 && (
+                        <button
+                          onClick={payWithCredit}
+                          disabled={busy || !creditCovers}
+                          className="w-full mb-3 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {creditCovers
+                            ? `Apply $${total.toFixed(2)} credit`
+                            : `Credit $${creditBalance.toFixed(2)} (not enough)`}
+                        </button>
+                      )}
+                      {!chainSupported ? (
+                        <button
+                          onClick={() => switchChainAsync({ chainId: PAYMENT_CHAIN_ID })}
+                          className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90"
+                        >
+                          Switch to BNB Smart Chain
+                        </button>
+                      ) : (
+                        <button
+                          onClick={pay}
+                          disabled={busy || insufficient}
+                          className="w-full bg-accent text-background py-3 rounded-lg font-semibold hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {step === 'paying'
+                            ? `Sending ${token}…`
+                            : step === 'recording'
+                              ? 'Recording ticket…'
+                              : `Pay ${total.toFixed(2)} ${token} with wallet`}
+                        </button>
+                      )}
+                    </>
                   )}
 
                   <div className="mt-5 pt-5 border-t border-surface">

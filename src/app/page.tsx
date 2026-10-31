@@ -317,6 +317,101 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="relative px-4 py-16">
+        <div className="container-page">
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.6, ease }}
+            className="card relative overflow-hidden p-8 sm:p-10"
+          >
+            <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
+            <div className="relative grid gap-8 lg:grid-cols-[1.4fr,1fr] lg:items-center">
+              <div>
+                <div className="chip mb-4">New player protection</div>
+                <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                  Lose your first 5 draws? Get 50% back.
+                </h2>
+                <p className="mt-4 text-muted">
+                  Every new player is covered. If your first five draws don&apos;t land a prize,
+                  we credit <span className="text-accent font-semibold">50% of everything you spent</span>{' '}
+                  on those draws straight back to your balance — automatically, the moment winners
+                  are drawn. No forms, no waiting.
+                </p>
+                <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+                  {[
+                    'Auto-credited on every losing draw',
+                    'Up to five losing draws covered',
+                    'Spend credit on any future draw',
+                    'Win at any point? Protection simply ends',
+                  ].map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm text-muted">
+                      <span className="mt-0.5 text-accent">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-8">
+                  <Link href="/draws" className="btn btn-primary">
+                    Start playing
+                  </Link>
+                </div>
+              </div>
+              <div className="card glass p-6">
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+                  Example
+                </div>
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Draw 1 — lost</span>
+                    <span className="text-foreground/80">$10 spent</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Draw 2 — lost</span>
+                    <span className="text-foreground/80">$20 spent</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Draw 3 — lost</span>
+                    <span className="text-foreground/80">$15 spent</span>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                    <span className="font-semibold">Credit back (50%)</span>
+                    <span className="stat-value text-2xl font-bold text-accent">$22.50</span>
+                  </div>
+                  <p className="text-xs text-muted">
+                    Credited automatically when those draws are drawn — ready to spend on your next
+                    tickets.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="relative px-4 py-16">
+        <div className="container-page">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="chip mb-3">Lottery Hub</div>
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">7 Ways To Win</h2>
+              <p className="mt-2 text-muted">Classic raffles, 50/50, hourly blitzes, daily jackpots, lotto & keno.</p>
+            </div>
+            <Link href="/lotteries" className="btn btn-primary">View All Lotteries →</Link>
+          </div>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[['🎟️','Classic Raffle','/lotteries/classic'],['🎯','50/50 Draw','/lotteries/fifty-fifty'],['⚡','Hourly Blitz','/lotteries/hourly'],['💎','Jackpot Rollover','/lotteries/rollover']].map(([icon,name,href])=>(
+              <Link key={href} href={href} className="card card-hover p-5 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-2xl">{icon}</div>
+                <p className="font-semibold">{name}</p>
+                <p className="mt-1 text-xs text-accent">Play Now →</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {openDraws.length > 0 && (
         <section className="relative px-4 py-16">
           <div className="container-page">

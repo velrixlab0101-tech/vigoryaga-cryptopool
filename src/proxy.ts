@@ -13,9 +13,10 @@ export function proxy(request: NextRequest) {
 
   const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/')
   const isApiPath = pathname.startsWith('/api/')
+  const isCreatorPath = pathname === '/creator' || pathname.startsWith('/creator/')
 
-  // Never cache API responses or admin pages.
-  if (isApiPath || isAdminPath) {
+  // Never cache API responses, admin pages, or private creator dashboards.
+  if (isApiPath || isAdminPath || isCreatorPath) {
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
   }
 

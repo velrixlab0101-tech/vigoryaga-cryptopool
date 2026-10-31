@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import dynamic from 'next/dynamic'
 import { useAccount } from 'wagmi'
+
+const ConnectButton = dynamic(() => import('@rainbow-me/rainbowkit').then(m => m.ConnectButton), { ssr: false })
 
 interface Ticket {
   id: string
@@ -22,14 +24,42 @@ interface Ticket {
   }
 }
 
+interface CreditSummary {
+  balance: number
+  lifetimeEarned: number
+  lossesUsed: number
+  protectionRemaining: number
+}
+
 export default function MyTicketsPage() {
-  const { address, isConnected } = useAccount()
+  let address: string | undefined
+  let isConnected = false
+  try {
+    const acc = useAccount()
+    address = acc?.address
+    isConnected = !!acc?.isConnected
+  } catch {
+    address = undefined
+    isConnected = false
+  }
   const [tickets, setTickets] = useState<Ticket[]>([])
+  const [credit, setCredit] = useState<CreditSummary | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const loadCredit = useCallback(() => {
+    if (!address) return
+    fetch(`/api/credits?wallet=${address}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && typeof d.balance === 'number') setCredit(d)
+      })
+      .catch(() => {})
+  }, [address])
 
   useEffect(() => {
     if (!address) {
       setTickets([])
+      setCredit(null)
       return
     }
     setLoading(true)
@@ -39,7 +69,8 @@ export default function MyTicketsPage() {
         if (Array.isArray(d)) setTickets(d)
       })
       .finally(() => setLoading(false))
-  }, [address])
+    loadCredit()
+  }, [address, loadCredit])
 
   const totalSpent = tickets.reduce((s, t) => s + t.amount, 0)
   const totalQty = tickets.reduce((s, t) => s + t.qty, 0)
@@ -64,75 +95,113 @@ export default function MyTicketsPage() {
           </div>
         ) : loading ? (
           <p className="text-foreground/60">Loading…</p>
-        ) : tickets.length === 0 ? (
-          <div className="text-center py-16 bg-surface rounded-2xl border border-accent/20">
-            <p className="text-foreground/70 mb-4">No tickets yet.</p>
-            <Link href="/draws" className="text-accent hover:underline">
-              Browse active draws →
-            </Link>
-          </div>
         ) : (
           <>
-            <div className="grid sm:grid-cols-3 gap-4 mb-8">
-              {[
-                { label: 'Tickets', value: totalQty },
-                { label: 'Total spent', value: `$${totalSpent.toFixed(2)}` },
-                { label: 'Draws entered', value: new Set(tickets.map((t) => t.draw.id)).size },
-              ].map((s) => (
-                <div key={s.label} className="bg-surface rounded-xl border border-accent/20 p-5">
-                  <div className="text-2xl font-bold text-accent">{s.value}</div>
-                  <div className="text-foreground/60 text-sm">{s.label}</div>
+            {credit && (
+              <div className="bg-surface rounded-2xl border border-accent/20 p-6 mb-8">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-foreground/60">Credit balance</p>
+                    <div className="text-3xl font-bold text-accent">
+                      ${credit.balance.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-sm text-foreground/60 text-right">
+                    <p>
+                      Protection slots used: {credit.lossesUsed} / 5
+                    </p>
+                    <p className="text-accent">
+                      {credit.protectionRemaining > 0
+                        ? `${credit.protectionRemaining} loss${credit.protectionRemaining === 1 ? '' : 'es'} of protection left`
+                        : 'Protection complete'}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <p className="text-xs text-foreground/50 mt-4">
+                  Tip: choose &ldquo;Apply credit&rdquo; on any open draw to spend this balance on
+                  tickets.
+                </p>
+              </div>
+            )}
 
-            <div className="overflow-x-auto bg-surface rounded-xl border border-accent/20">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-foreground/50 text-left">
-                    <th className="py-3 px-4">Draw</th>
-                    <th className="py-3 px-4 text-right">Qty</th>
-                    <th className="py-3 px-4 text-right">Amount</th>
-                    <th className="py-3 px-4">Token</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4 text-right">Tx</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tickets.map((t) => (
-                    <tr key={t.id} className="border-t border-surface">
-                      <td className="py-3 px-4">
-                        <Link href={`/draws/${t.draw.id}`} className="hover:text-accent">
-                          {t.draw.title}
-                        </Link>
-                      </td>
-                      <td className="py-3 px-4 text-right">{t.qty}</td>
-                      <td className="py-3 px-4 text-right">${t.amount.toFixed(2)}</td>
-                      <td className="py-3 px-4">{t.token || 'USDC'}</td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs">
-                          {t.refundTxHash ? 'refunded' : t.draw.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-foreground/60">
-                        {new Date(t.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <a
-                          href={`https://bscscan.com/tx/${t.txHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-accent hover:underline"
-                        >
-                          ↗
-                        </a>
-                      </td>
-                    </tr>
+            {tickets.length === 0 ? (
+              <div className="text-center py-16 bg-surface rounded-2xl border border-accent/20">
+                <p className="text-foreground/70 mb-4">No tickets yet.</p>
+                <Link href="/draws" className="text-accent hover:underline">
+                  Browse active draws →
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="grid sm:grid-cols-3 gap-4 mb-8">
+                  {[
+                    { label: 'Tickets', value: totalQty },
+                    { label: 'Total spent', value: `$${totalSpent.toFixed(2)}` },
+                    { label: 'Draws entered', value: new Set(tickets.map((t) => t.draw.id)).size },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-surface rounded-xl border border-accent/20 p-5">
+                      <div className="text-2xl font-bold text-accent">{s.value}</div>
+                      <div className="text-foreground/60 text-sm">{s.label}</div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                <div className="overflow-x-auto bg-surface rounded-xl border border-accent/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-foreground/50 text-left">
+                        <th className="py-3 px-4">Draw</th>
+                        <th className="py-3 px-4 text-right">Qty</th>
+                        <th className="py-3 px-4 text-right">Amount</th>
+                        <th className="py-3 px-4">Token</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4 text-right">Tx</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tickets.map((t) => {
+                        const isCredit = t.txHash.startsWith('credit:')
+                        return (
+                          <tr key={t.id} className="border-t border-surface">
+                            <td className="py-3 px-4">
+                              <Link href={`/draws/${t.draw.id}`} className="hover:text-accent">
+                                {t.draw.title}
+                              </Link>
+                            </td>
+                            <td className="py-3 px-4 text-right">{t.qty}</td>
+                            <td className="py-3 px-4 text-right">${t.amount.toFixed(2)}</td>
+                            <td className="py-3 px-4">{t.token || 'USDC'}</td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs">
+                                {t.refundTxHash ? 'refunded' : t.draw.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-foreground/60">
+                              {new Date(t.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {isCredit ? (
+                                <span className="text-foreground/50 text-xs">credit</span>
+                              ) : (
+                                <a
+                                  href={`https://bscscan.com/tx/${t.txHash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-accent hover:underline"
+                                >
+                                  ↗
+                                </a>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

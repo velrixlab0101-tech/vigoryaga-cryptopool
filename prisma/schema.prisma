@@ -7,59 +7,193 @@ datasource db {
 }
 
 model Draw {
-  id                String    @id @default(cuid())
-  title             String
-  ticketPrice       Decimal   @default(1) @db.Decimal(20, 6)
-  operatorFeePct    Decimal   @default(10) @db.Decimal(5, 2)
-  startTime         DateTime
-  closeTime         DateTime
-  status            String    @default("draft")
-  prizeStructure    Json      @default("[{\"tier\":1,\"pct\":50},{\"tier\":2,\"pct\":25},{\"tier\":3,\"pct\":15},{\"tier\":4,\"pct\":7},{\"tier\":5,\"pct\":3}]")
-  potTotal          Decimal   @default(0) @db.Decimal(20, 6)
-  operatorPaid      Boolean   @default(false)
-  operatorTxHash    String?
-  cancelledAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  tickets           Ticket[]
-  winners           Winner[]
+  id             String    @id @default(cuid())
+  title          String
+  ticketPrice    Decimal   @default(1) @db.Decimal(20, 6)
+  operatorFeePct Decimal   @default(10) @db.Decimal(5, 2)
+  startTime      DateTime
+  closeTime      DateTime
+  status         String    @default("draft")
+  prizeStructure Json      @default("[{\"tier\":1,\"pct\":50},{\"tier\":2,\"pct\":25},{\"tier\":3,\"pct\":15},{\"tier\":4,\"pct\":7},{\"tier\":5,\"pct\":3}]")
+  potTotal       Decimal   @default(0) @db.Decimal(20, 6)
+  operatorPaid   Boolean   @default(false)
+  operatorTxHash String?
+  cancelledAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  tickets        Ticket[]
+  winners        Winner[]
 }
 
 model Ticket {
-  id           String    @id @default(cuid())
-  drawId       String
-  buyerAddress String
-  txHash       String
-  chainId      Int       @default(56)
-  token        String    @default("USDC")
-  qty          Int
-  amount       Decimal   @db.Decimal(20, 6)
-  referrerCode String?
-  refundTxHash String?
-  refundedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  draw         Draw      @relation(fields: [drawId], references: [id])
+  id               String    @id @default(cuid())
+  drawId           String
+  buyerAddress     String
+  txHash           String
+  chainId          Int       @default(56)
+  token            String    @default("USDC")
+  qty              Int
+  amount           Decimal   @db.Decimal(20, 6)
+  referrerCode     String?
+  referralSharePct Decimal?  @db.Decimal(5, 2)
+  creditApplied    Decimal?  @db.Decimal(20, 6)
+  refundTxHash     String?
+  refundedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  draw             Draw      @relation(fields: [drawId], references: [id])
 
   @@unique([chainId, txHash])
+  @@index([referrerCode])
 }
 
 model Winner {
-  id           String   @id @default(cuid())
-  drawId       String
-  place        Int
-  wallet       String
-  amount       Decimal  @db.Decimal(20, 6)
-  spent        Decimal  @default(0) @db.Decimal(20, 6)
-  token        String?
-  txHash       String?
-  createdAt    DateTime @default(now())
-  draw         Draw     @relation(fields: [drawId], references: [id])
+  id        String   @id @default(cuid())
+  drawId    String
+  place     Int
+  wallet    String
+  amount    Decimal  @db.Decimal(20, 6)
+  spent     Decimal  @default(0) @db.Decimal(20, 6)
+  token     String?
+  txHash    String?
+  createdAt DateTime @default(now())
+  draw      Draw     @relation(fields: [drawId], references: [id])
 }
 
 model Referral {
-  id            String   @id @default(cuid())
-  code          String   @unique
+  id            String           @id @default(cuid())
+  code          String           @unique
   ownerAddress  String
-  earnedCredits Decimal  @default(0) @db.Decimal(20, 6)
-  createdAt     DateTime @default(now())
+  displayName   String?
+  sharePct      Decimal?         @db.Decimal(5, 2)
+  accessToken   String?          @unique
+  earnedCredits Decimal          @default(0) @db.Decimal(20, 6)
+  paidOut       Decimal          @default(0) @db.Decimal(20, 6)
+  isCreator     Boolean          @default(false)
+  active        Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  payouts       ReferralPayout[]
+}
+
+model ReferralPayout {
+  id         String   @id @default(cuid())
+  referralId String
+  amount     Decimal  @db.Decimal(20, 6)
+  note       String?
+  createdAt  DateTime @default(now())
+  referral   Referral @relation(fields: [referralId], references: [id])
+
+  @@index([referralId])
+}
+
+model UserCredit {
+  id             String        @id @default(cuid())
+  wallet         String        @unique
+  balance        Decimal       @default(0) @db.Decimal(20, 6)
+  lifetimeEarned Decimal       @default(0) @db.Decimal(20, 6)
+  lossesUsed     Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  entries        CreditEntry[]
+}
+
+model CreditEntry {
+  id           String      @id @default(cuid())
+  wallet       String
+  drawId       String?
+  type         String
+  amount       Decimal     @db.Decimal(20, 6)
+  note         String?
+  createdAt    DateTime    @default(now())
+  userCredit   UserCredit? @relation(fields: [userCreditId], references: [id])
+  userCreditId String?
+
+  @@index([wallet])
+  @@index([drawId])
+  @@index([userCreditId])
+}
+
+model Lottery {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  name        String
+  type        String // raffle|fifty50|hourly|daily|numbermatch|keno|rollover
+  description String?
+  icon        String?
+  isActive    Boolean        @default(true)
+  config      Json           @default("{}")
+  prizeConfig Json?
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  rounds      LotteryRound[]
+}
+
+model LotteryRound {
+  id             String          @id @default(cuid())
+  lotteryId      String
+  lottery        Lottery         @relation(fields: [lotteryId], references: [id])
+  title          String
+  status         String          @default("draft")
+  ticketPrice    Decimal         @default(1) @db.Decimal(20, 6)
+  startTime      DateTime
+  closeTime      DateTime
+  potTotal       Decimal         @default(0) @db.Decimal(20, 6)
+  prizeConfig    Json?
+  rules          Json?
+  rolloverFromId String?
+  isRollover     Boolean         @default(false)
+  rolloverAmount Decimal         @default(0) @db.Decimal(20, 6)
+  drawnAt        DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  entries        LotteryEntry[]
+  winners        LotteryWinner[]
+}
+
+model LotteryEntry {
+  id           String       @id @default(cuid())
+  roundId      String
+  round        LotteryRound @relation(fields: [roundId], references: [id])
+  buyerAddress String
+  txHash       String
+  chainId      Int          @default(56)
+  token        String       @default("USDC")
+  qty          Int          @default(1)
+  amount       Decimal      @db.Decimal(20, 6)
+  numbers      Json?
+  createdAt    DateTime     @default(now())
+
+  @@unique([chainId, txHash])
+  @@index([roundId])
+  @@index([buyerAddress])
+}
+
+model LotteryWinner {
+  id        String       @id @default(cuid())
+  roundId   String
+  round     LotteryRound @relation(fields: [roundId], references: [id])
+  wallet    String
+  place     Int          @default(1)
+  amount    Decimal      @db.Decimal(20, 6)
+  spent     Decimal      @default(0) @db.Decimal(20, 6)
+  token     String?
+  tier      String?
+  matches   Int?
+  txHash    String?
+  paidAt    DateTime?
+  createdAt DateTime     @default(now())
+}
+
+model GameSetting {
+  id          String   @id @default(cuid())
+  gameSlug    String   @unique
+  displayName String
+  winPercent  Float    @default(45)
+  houseEdge   Float    @default(55)
+  enabled     Boolean  @default(true)
+  minBet      Float    @default(1)
+  maxBet      Float    @default(100)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
 }

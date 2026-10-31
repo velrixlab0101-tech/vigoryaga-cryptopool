@@ -6,7 +6,6 @@ const NAV = [
   { href: '/history', label: 'Draw history' },
   { href: '/winners', label: 'Winners' },
   { href: '/my-tickets', label: 'My tickets' },
-  { href: '/referrals', label: 'Referrals' },
 ]
 
 const LEGAL = [

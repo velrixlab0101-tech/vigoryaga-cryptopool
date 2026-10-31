@@ -26,6 +26,44 @@ descending prizes plus an operator fee, then pays each winner manually.
 5. If a draw cannot run, the operator cancels it and records a refund tx hash
    per ticket.
 
+## New-player protection (first-5-loss 50% credit-back)
+
+Advertised on the landing page and applied automatically:
+
+- For a player's **first 5 lost draws**, they are credited **50% of what they
+  spent** on each of those draws. Winning a draw neither credits nor consumes a
+  slot (winners earn nothing back and their protection simply ends).
+- Credit is issued automatically the moment winners are declared, stored as an
+  in-app balance (`UserCredit` + `CreditEntry`), and capped at 5 lost draws per
+  wallet.
+- Credit is **spendable on future tickets**, not withdrawable. On any open draw a
+  connected player can choose **Apply credit** (wallet-signed, no on-chain
+  transfer). Credit receipts are stored with a synthetic `credit:<id>` hash so no
+  BscScan link is exposed.
+- Balance and history are private: `GET /api/credits?wallet=` returns only that
+  wallet's data.
+- Core logic lives in `src/lib/credits.ts` (`computeCreditBacks`, `applyRedeem`,
+  `PROTECTION_LIMIT`, `CREDIT_BACK_RATE`).
+
+## Private creator revenue-share
+
+An invite-only partner program that is invisible to normal users and has **no
+on-chain traceability**.
+
+- Operators add creators from **Admin → Creators** (`/admin/creators`): set the
+  wallet, a custom share percentage (0–50), and an optional display name. No
+  default rate exists — an unapproved or rate-less referral always earns 0%.
+- Each creator gets a secret 256-bit dashboard link `/creator/<token>`
+  (`GET /api/creator/<token>`). The dashboard shows referred players, volume,
+  earned/paid/pending — **never** a wallet address or transaction hash.
+- Creator shares accrue on referred ticket purchases (approved, non-self only),
+  and payouts are recorded **off-chain** (amount + note, no tx hash) from the
+  same admin page.
+- Secrecy guarantees: the public `/api/referrals` route and `/referrals` page
+  both return a uniform 404; unapproved wallets and bad tokens get the identical
+  response; `/referrals` is removed from the navbar, footer and sitemap; and
+  `/creator/*` responses are `no-store`.
+
 ## Local development
 
 ```bash
@@ -52,6 +90,10 @@ The script is idempotent — rows are prefixed `seed_draw_*` and recreated on
 each run, so real draws are never touched. An `open` draw is only created when
 none exists. Public APIs strip all wallet addresses, so synthetic winners are
 indistinguishable from real ones on the site.
+
+It also seeds 4 demo **creators** (with off-chain payouts and printable
+`/creator/<token>` links) and a set of demo credit-back balances so the My
+Tickets credit card has data.
 
 ### Database
 

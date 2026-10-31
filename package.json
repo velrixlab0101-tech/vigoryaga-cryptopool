@@ -45,5 +45,8 @@
     "vitest": "^3.2.7",
     "wrangler": "^4.151.1"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "qr": "0.5.5"
+  }
 }

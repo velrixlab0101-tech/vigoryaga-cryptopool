@@ -3,6 +3,7 @@ import { decodeEventLog, type Log } from 'viem'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { clientForChain } from '@/lib/chain'
+import { isApprovedCreator, resolveSharePct } from '@/lib/referrals'
 import {
   ERC20_ABI,
   PAYMENT_CHAIN_ID,
@@ -104,6 +105,15 @@ export async function POST(
 
     const buyer = [...senders][0]
 
+    // Only approved, active creators earn a share; unapproved codes credit 0.
+    const referral = referrerCode
+      ? await prisma.referral.findUnique({ where: { code: referrerCode } })
+      : null
+    const sharePct =
+      referral && isApprovedCreator(referral) && referral.ownerAddress.toLowerCase() !== buyer
+        ? resolveSharePct(referral)
+        : 0
+
     const ticket = await prisma.$transaction(async (tx) => {
       const created = await tx.ticket.create({
         data: {
@@ -114,22 +124,19 @@ export async function POST(
           token: token.symbol,
           qty,
           amount: amountDollars,
-          referrerCode,
+          referrerCode: sharePct > 0 ? referrerCode : null,
+          referralSharePct: sharePct > 0 ? sharePct : null,
         },
       })
       await tx.draw.update({
         where: { id: draw.id },
         data: { potTotal: { increment: amountDollars } },
       })
-      if (referrerCode) {
-        const referral = await tx.referral.findUnique({ where: { code: referrerCode } })
-        if (referral && referral.ownerAddress.toLowerCase() !== buyer) {
-          const pct = Math.min(50, Math.max(0, parseFloat(process.env.REFERRAL_PCT || '5')))
-          await tx.referral.update({
-            where: { id: referral.id },
-            data: { earnedCredits: { increment: amountDollars * (pct / 100) } },
-          })
-        }
+      if (referral && sharePct > 0) {
+        await tx.referral.update({
+          where: { id: referral.id },
+          data: { earnedCredits: { increment: amountDollars * (sharePct / 100) } },
+        })
       }
       return created
     })

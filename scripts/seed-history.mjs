@@ -85,12 +85,46 @@ const TITLE_SERIES = [
   'USDC Mega Draw',
 ]
 
-const REFERRALS = Array.from({ length: 12 }, (_, i) => ({
-  code: `DEMO${hex(`referral-${i}`, 4).toUpperCase()}`,
-  ownerAddress: PLAYERS[i * 7],
-  earnedCredits: round2(rand(3, 48)),
-}))
+const CREATOR_NAMES = [
+  'Ava R.',
+  'Marcus T.',
+  'Lena K.',
+  'Diego S.',
+  'Priya N.',
+  'Noah B.',
+  'Sofia M.',
+  'Kai W.',
+  'Zara H.',
+  'Omar F.',
+  'Ines L.',
+  'Tariq A.',
+]
+
+// A code alphabet that matches the app's (no ambiguous 0/O/1/I).
+const tokenHex = (input) => createHash('sha256').update(`creator-token-${input}`).digest('hex')
+
+const REFERRALS = Array.from({ length: 12 }, (_, i) => {
+  // The first 4 demo referrals are "creators": private, with a secret token
+  // link, a display name, a custom share rate, and some off-chain payouts.
+  const isCreator = i < 4
+  const earnedCredits = round2(rand(isCreator ? 40 : 3, isCreator ? 380 : 48))
+  const paidOut = isCreator ? round2(earnedCredits * rand(0.2, 0.55)) : 0
+  return {
+    code: `DEMO${hex(`referral-${i}`, 4).toUpperCase()}`,
+    ownerAddress: PLAYERS[i * 7],
+    earnedCredits,
+    displayName: isCreator ? CREATOR_NAMES[i] : null,
+    sharePct: isCreator ? pick([8, 10, 12, 15]) : null,
+    accessToken: isCreator ? tokenHex(i) : null,
+    isCreator,
+    active: true,
+    paidOut,
+    // A deterministic stand-in so the demo dashboard link can be derived.
+    _token: isCreator ? tokenHex(i) : null,
+  }
+})
 const REFERRAL_CODES = REFERRALS.map((r) => r.code)
+const CREATORS = REFERRALS.filter((r) => r.isCreator)
 
 function buildDrawTickets(price, playerCount, token) {
   const buyers = new Set()
@@ -123,6 +157,9 @@ async function main() {
   await prisma.winner.deleteMany({ where: { drawId: { startsWith: 'seed_draw_' } } })
   await prisma.ticket.deleteMany({ where: { drawId: { startsWith: 'seed_draw_' } } })
   await prisma.draw.deleteMany({ where: { id: { startsWith: 'seed_draw_' } } })
+  await prisma.creditEntry.deleteMany({ where: { note: { startsWith: 'Demo' } } })
+  await prisma.userCredit.deleteMany({ where: { wallet: { in: PLAYERS } } })
+  await prisma.referralPayout.deleteMany({ where: { note: { startsWith: 'Demo' } } })
   await prisma.referral.deleteMany({ where: { code: { startsWith: 'DEMO' } } })
 
   // 90 historical draws ≈ 6–7 pages of history at ~14–16 rows per page, and
@@ -220,7 +257,59 @@ async function main() {
     )
   }
 
-  await prisma.referral.createMany({ data: REFERRALS })
+  await prisma.referral.createMany({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    data: REFERRALS.map(({ _token, ...r }) => r),
+  })
+
+  // Off-chain creator payouts (no tx hash by design — never traceable on-chain).
+  for (const c of CREATORS) {
+    const referral = await prisma.referral.findUnique({ where: { code: c.code } })
+    if (!referral) continue
+    const installments = randInt(1, 3)
+    let remaining = c.paidOut
+    for (let k = 0; k < installments && remaining > 0.5; k++) {
+      const isLast = k === installments - 1
+      const amount = round2(isLast ? remaining : remaining * rand(0.3, 0.7))
+      remaining = round2(remaining - amount)
+      await prisma.referralPayout.create({
+        data: {
+          referralId: referral.id,
+          amount,
+          note: `Demo payout #${k + 1}`,
+        },
+      })
+    }
+    console.log(`  creator ${c.code} · ${c.sharePct}% · $${c.earnedCredits.toFixed(2)} earned · $${c.paidOut.toFixed(2)} paid`)
+  }
+
+  // Demo credit-back balances: a handful of players mid-way through their
+  // first-5-loss protection, so the My Tickets credit card has data.
+  const creditWallets = Array.from({ length: 25 }, () => pick(PLAYERS))
+  let creditSeed = 0
+  const creditEntryRows = []
+  for (const wallet of new Set(creditWallets)) {
+    const lossesUsed = randInt(1, 5)
+    const lifetimeEarned = round2(rand(5, 60))
+    const balance = round2(lifetimeEarned * rand(0.2, 1))
+    const uc = await prisma.userCredit.create({
+      data: { wallet, balance, lifetimeEarned, lossesUsed },
+    })
+    for (let k = 0; k < lossesUsed; k++) {
+      creditEntryRows.push({
+        wallet,
+        userCreditId: uc.id,
+        drawId: `seed_draw_${String(((creditSeed + k) % HISTORY_COUNT) + 1).padStart(2, '0')}`,
+        type: 'creditback',
+        amount: round2(lifetimeEarned / lossesUsed),
+        note: 'Demo credit-back (first 5 losses)',
+      })
+    }
+    creditSeed++
+  }
+  if (creditEntryRows.length > 0) {
+    await prisma.creditEntry.createMany({ data: creditEntryRows })
+  }
 
   const openDraw = await prisma.draw.findFirst({
     where: { status: 'open', NOT: { id: { startsWith: 'seed_draw_' } } },
@@ -277,8 +366,11 @@ async function main() {
   }
 
   console.log(
-    `Done: ${HISTORY_COUNT} historical draws, ${totalTickets} tickets, $${totalPot.toFixed(2)} total volume, ${REFERRALS.length} referrals.`,
+    `Done: ${HISTORY_COUNT} historical draws, ${totalTickets} tickets, $${totalPot.toFixed(2)} total volume, ${REFERRALS.length} referrals (${CREATORS.length} creators).`,
   )
+  for (const c of CREATORS) {
+    console.log(`  → demo creator link: /creator/${c._token}`)
+  }
 }
 
 main()

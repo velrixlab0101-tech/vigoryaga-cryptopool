@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useAccount, useSignMessage } from 'wagmi'
 import { motion } from 'framer-motion'
 import { isAdminAddress, getAdminWallet, buildAdminFetchHeaders } from '@/lib/admin-client'
@@ -18,8 +19,19 @@ interface Draw {
 }
 
 export default function AdminPage() {
-  const { address } = useAccount()
-  const { signMessageAsync } = useSignMessage()
+  let address: string | undefined
+  try {
+    const acc = useAccount()
+    address = acc?.address
+  } catch {
+    address = undefined
+  }
+  let signMessageAsync: any
+  try {
+    signMessageAsync = useSignMessage().signMessageAsync
+  } catch {
+    signMessageAsync = async () => { throw new Error('wallet not ready') }
+  }
   const [draws, setDraws] = useState<Draw[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
@@ -93,12 +105,23 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold">Admin Panel</h1>
-          <button
-            onClick={() => setShowCreate(!showCreate)}
-            className="bg-accent text-background px-6 py-2 rounded-lg font-semibold hover:bg-accent/90"
-          >
-            Create Draw
-          </button>
+          <div className="flex items-center gap-3">
+            <Link href="/admin/creators" className="btn btn-ghost">
+              Creators
+            </Link>
+            <Link href="/admin/lotteries" className="btn btn-ghost">
+              Lotteries
+            </Link>
+            <Link href="/admin/games" className="btn btn-ghost">
+              Games Win Control
+            </Link>
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="bg-accent text-background px-6 py-2 rounded-lg font-semibold hover:bg-accent/90"
+            >
+              Create Draw
+            </button>
+          </div>
         </div>
         
         {showCreate && (
